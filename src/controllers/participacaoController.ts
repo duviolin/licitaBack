@@ -168,6 +168,33 @@ export async function analisarEditalUpload(
   }
 }
 
+export async function uploadDocumentos(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      res.status(400).json({ error: "Nenhum arquivo enviado" });
+      return;
+    }
+
+    const buffers = files.map((f) => ({
+      buffer: f.buffer,
+      nomeArquivo: f.originalname,
+    }));
+
+    const result = await participacaoService.analisarDocumentosUpload(
+      req.params.id as string,
+      buffers
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function buscarEditalViaRobo(
   req: Request,
   res: Response,

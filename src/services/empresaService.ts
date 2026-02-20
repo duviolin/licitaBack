@@ -4,6 +4,7 @@ import * as empresaRepo from "../repositories/empresaRepository.js";
 import * as matchRepo from "../repositories/licitacaoMatchRepository.js";
 import { processarTexto, extrairStemsDeTextos } from "../utils/text.js";
 import { calcularScoreComposto } from "../utils/score.js";
+import * as embeddingService from "./embeddingService.js";
 import prisma from "../lib/prisma.js";
 
 export async function cadastrarPorCnpj(cnpjRaw: string) {
@@ -26,7 +27,7 @@ export async function cadastrarPorCnpj(cnpjRaw: string) {
   ];
   const stemsCnae = extrairStemsDeTextos(descricoesCnae);
 
-  const empresa = await empresaRepo.create({
+  const empresaData: any = {
     cnpj: dados.cnpj,
     razaoSocial: dados.razao_social,
     nomeFantasia: dados.nome_fantasia ?? "",
@@ -37,7 +38,25 @@ export async function cadastrarPorCnpj(cnpjRaw: string) {
     municipio: dados.municipio ?? "",
     situacaoCadastral: dados.descricao_situacao_cadastral ?? "",
     stemsCnae,
-  });
+  };
+
+  // Gerar embedding do perfil da empresa
+  if (embeddingService.isDisponivel()) {
+    const textoEmpresa = embeddingService.montarTextoEmpresa({
+      razaoSocial: dados.razao_social,
+      cnaePrincipalDescricao: dados.cnae_fiscal_descricao,
+      cnaesSecundarios: dados.cnaes_secundarios,
+      palavrasChave: [],
+    });
+    try {
+      empresaData.embedding = await embeddingService.gerarEmbedding(textoEmpresa);
+      console.log(`[Empresa] Embedding gerado (${empresaData.embedding.length} dims)`);
+    } catch (err) {
+      console.warn("[Empresa] Falha ao gerar embedding:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  const empresa = await empresaRepo.create(empresaData);
 
   await recalcularMatchesEmpresa(empresa.id);
 
@@ -76,6 +95,21 @@ export async function atualizarPreferencias(
   }
   if (prefs.valorMaximo !== undefined) {
     updateData.valorMaximo = prefs.valorMaximo;
+  }
+
+  // Regenerar embedding se palavras-chave mudaram
+  if (prefs.palavrasChave !== undefined && embeddingService.isDisponivel()) {
+    try {
+      const textoEmpresa = embeddingService.montarTextoEmpresa({
+        razaoSocial: empresa.razaoSocial,
+        cnaePrincipalDescricao: empresa.cnaePrincipalDescricao,
+        cnaesSecundarios: empresa.cnaesSecundarios,
+        palavrasChave: prefs.palavrasChave,
+      });
+      updateData.embedding = await embeddingService.gerarEmbedding(textoEmpresa);
+    } catch (err) {
+      console.warn("[Empresa] Falha ao regenerar embedding:", err instanceof Error ? err.message : err);
+    }
   }
 
   const atualizada = await empresaRepo.update(id, updateData);
@@ -125,12 +159,20 @@ export async function recalcularMatchesEmpresa(empresaId: string) {
     ...new Set([...empresa.stemsCnae, ...empresa.stemsChave]),
   ];
 
-  if (stemsEmpresa.length === 0) return 0;
+  if (stemsEmpresa.length === 0 && empresa.embedding.length === 0) return 0;
 
   const licitacoes = await prisma.licitacao.findMany();
 
+  const embEmpresa = empresa.embedding;
+
   let count = 0;
   for (const lic of licitacoes) {
+    let scoreSemantico = 0;
+    if (embEmpresa.length > 0 && lic.embedding.length > 0) {
+      const raw = embeddingService.similaridadeCosseno(embEmpresa, lic.embedding);
+      scoreSemantico = Math.max(0, raw);
+    }
+
     const result = calcularScoreComposto({
       stemsEmpresa,
       stemsObjeto: lic.stemsObjeto,
@@ -141,12 +183,14 @@ export async function recalcularMatchesEmpresa(empresaId: string) {
       valorMinimo: empresa.valorMinimo ? Number(empresa.valorMinimo) : null,
       valorMaximo: empresa.valorMaximo ? Number(empresa.valorMaximo) : null,
       valorEstimado: lic.valorEstimado ? Number(lic.valorEstimado) : null,
+      scoreSemantico,
     });
 
     if (result.score > 0) {
       await matchRepo.upsert(empresaId, lic.id, {
         score: result.score,
         scoreTextual: result.scoreTextual,
+        scoreSemantico: result.scoreSemantico,
         scoreGeografico: result.scoreGeografico,
         scoreValor: result.scoreValor,
         palavrasMatch: result.palavrasMatch,

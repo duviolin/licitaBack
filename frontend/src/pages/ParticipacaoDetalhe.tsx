@@ -4,7 +4,9 @@ import {
   ArrowLeft, Loader2, AlertCircle, CheckCircle2,
   Calendar, FileText, RefreshCw, Trash2, XCircle,
   ExternalLink, Clock, Shield, Handshake, ChevronDown, ChevronUp,
-  Link2, Send, Upload, Bot,
+  Link2, Send, Upload, Bot, Sparkles, BookOpen, Gavel, DollarSign, Scale,
+  FolderOpen, Download, AlertTriangle, ShieldAlert, ThumbsUp, ThumbsDown,
+  ClipboardList, Copy,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, formatCurrency } from '../lib/constants';
@@ -14,7 +16,8 @@ import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import type {
   Participacao, ParticipacaoStatus, ConformidadeStatus,
-  DocumentoExigido, ConformidadeDocumento, PrazosEdital,
+  DocumentoExigido, ConformidadeDocumento, PrazosEdital, ResumoEdital,
+  DocumentoProcesso, TipoDocumentoProcesso, AnaliseRisco,
 } from '../types';
 
 interface RoboLogEntry {
@@ -53,12 +56,11 @@ export function ParticipacaoDetalhe() {
   const [showEdit, setShowEdit] = useState(false);
   const [showRemove, setShowRemove] = useState(false);
   const [docsExpanded, setDocsExpanded] = useState(false);
-  const [editalUrlManual, setEditalUrlManual] = useState('');
   const [analisando, setAnalisando] = useState(false);
-  const [editalTab, setEditalTab] = useState<'link' | 'upload' | 'robo'>('robo');
-  const [editalFile, setEditalFile] = useState<File | null>(null);
   const [roboLog, setRoboLog] = useState<RoboLogEntry[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  const roboAutoIniciado = useRef(false);
 
   useEffect(() => {
     if (id) loadDetalhe(id);
@@ -67,6 +69,20 @@ export function ParticipacaoDetalhe() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [roboLog]);
+
+  useEffect(() => {
+    if (
+      participacao
+      && !participacao.editalTexto
+      && participacao.documentosExigidos?.length === 0
+      && (participacao.portalLink || participacao.licitacao?.linkPortal)
+      && !analisando
+      && !roboAutoIniciado.current
+    ) {
+      roboAutoIniciado.current = true;
+      handleBuscarViaRobo();
+    }
+  }, [participacao]);
 
   async function loadDetalhe(pid: string) {
     try {
@@ -91,65 +107,6 @@ export function ParticipacaoDetalhe() {
       addToast('error', err instanceof Error ? err.message : 'Erro ao reprocessar');
     } finally {
       setReprocessando(false);
-    }
-  }
-
-  async function handleAnalisarManual() {
-    if (!id || !editalUrlManual.trim()) return;
-    try {
-      setAnalisando(true);
-      const data = await api.post<Participacao>(`/participacoes/${id}/analisar-edital`, {
-        editalUrl: editalUrlManual.trim(),
-      });
-      setParticipacao(data);
-      setEditalUrlManual('');
-      addToast('success', 'Análise de edital concluída!');
-    } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Erro ao analisar edital');
-    } finally {
-      setAnalisando(false);
-    }
-  }
-
-  async function handleRetentarAnalise() {
-    if (!id || !participacao?.editalUrl) return;
-    try {
-      setAnalisando(true);
-      const data = await api.post<Participacao>(`/participacoes/${id}/analisar-edital`, {
-        editalUrl: participacao.editalUrl,
-      });
-      setParticipacao(data);
-      addToast('success', 'Análise de edital concluída!');
-    } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Erro ao analisar edital');
-    } finally {
-      setAnalisando(false);
-    }
-  }
-
-  async function handleUploadEdital() {
-    if (!id || !editalFile) return;
-    try {
-      setAnalisando(true);
-      const formData = new FormData();
-      formData.append('edital', editalFile);
-
-      const res = await fetch(`/api/participacoes/${id}/analisar-edital-upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Erro ${res.status}`);
-      }
-      const data: Participacao = await res.json();
-      setParticipacao(data);
-      setEditalFile(null);
-      addToast('success', 'Análise de edital concluída!');
-    } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Erro ao analisar edital');
-    } finally {
-      setAnalisando(false);
     }
   }
 
@@ -331,12 +288,27 @@ export function ParticipacaoDetalhe() {
         </div>
       )}
 
-      {/* Prazos */}
+      {/* Badge IA */}
+      {p.usouLLM && (
+        <div className="flex items-center gap-1.5 mb-4">
+          <Sparkles size={14} className="text-purple-500" />
+          <span className="text-xs text-purple-600 font-medium">
+            Análise realizada com inteligência artificial
+          </span>
+        </div>
+      )}
+
+      {/* 1. Resumo Executivo — o que é esta licitação */}
+      {p.resumoEdital && (
+        <ResumoEditalCard resumo={p.resumoEdital} />
+      )}
+
+      {/* 2. Prazos — quando vencem as datas críticas */}
       {prazos && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Calendar size={18} className="text-blue-600" />
-            <h2 className="font-semibold text-slate-900">Prazos Extraídos do Edital</h2>
+            <h2 className="font-semibold text-slate-900">Prazos</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <PrazoItem label="Abertura" value={prazos.dataAbertura} />
@@ -348,7 +320,15 @@ export function ParticipacaoDetalhe() {
         </div>
       )}
 
-      {/* Conformidade */}
+      {/* 3. Risco + Recomendação — devemos participar? */}
+      {(p.analiseRisco || p.scoreRecomendacao !== null) && (
+        <RiscoRecomendacaoCard
+          analiseRisco={p.analiseRisco}
+          scoreRecomendacao={p.scoreRecomendacao}
+        />
+      )}
+
+      {/* 4. Conformidade — a empresa tem os docs necessários? */}
       {conformidades.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
@@ -360,33 +340,57 @@ export function ParticipacaoDetalhe() {
             {conformidades.map((c) => {
               const cfg = CONFORMIDADE_CFG[c.status];
               const Icon = cfg.icon;
+              const isSemanticMatch = c.observacao?.includes('Match semântico');
               return (
-                <div key={c.id} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50">
-                  <Icon size={18} className={cfg.color} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-900">
-                        {c.documentoExigido?.nome ?? c.documentoExigidoId.slice(0, 8)}
-                      </span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                        c.status === 'OK' ? 'bg-green-100 text-green-700' :
-                        c.status === 'VENCIDO' ? 'bg-amber-100 text-amber-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>{cfg.label}</span>
+                <div key={c.id} className={`p-3 rounded-lg border ${
+                  c.sugestao ? 'border-l-4' : ''
+                } ${
+                  c.status === 'OK' ? 'border-slate-100' :
+                  c.status === 'VENCIDO' ? 'border-amber-200' :
+                  c.status === 'AUSENTE' ? 'border-red-200' :
+                  'border-orange-200'
+                } hover:bg-slate-50`}>
+                  <div className="flex items-center gap-3">
+                    <Icon size={18} className={cfg.color} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-slate-900">
+                          {c.documentoExigido?.nome ?? c.documentoExigidoId.slice(0, 8)}
+                        </span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          c.status === 'OK' ? 'bg-green-100 text-green-700' :
+                          c.status === 'VENCIDO' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>{cfg.label}</span>
+                        {isSemanticMatch && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
+                            Match IA
+                          </span>
+                        )}
+                      </div>
+                      {c.observacao && (
+                        <p className="text-xs text-slate-500 mt-0.5">{c.observacao}</p>
+                      )}
+                      {c.empresaDocumento && (
+                        <p className="text-xs text-teal-600 mt-0.5">
+                          Vinculado: {c.empresaDocumento.nome}
+                          {c.empresaDocumento.validade && ` • Validade: ${formatDate(c.empresaDocumento.validade)}`}
+                        </p>
+                      )}
                     </div>
-                    {c.observacao && (
-                      <p className="text-xs text-slate-500 mt-0.5">{c.observacao}</p>
-                    )}
-                    {c.empresaDocumento && (
-                      <p className="text-xs text-teal-600 mt-0.5">
-                        Vinculado: {c.empresaDocumento.nome}
-                        {c.empresaDocumento.validade && ` • Validade: ${formatDate(c.empresaDocumento.validade)}`}
-                      </p>
-                    )}
+                    <span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0">
+                      {c.documentoExigido?.tipo}
+                    </span>
                   </div>
-                  <span className="text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 shrink-0">
-                    {c.documentoExigido?.tipo}
-                  </span>
+                  {c.sugestao && (
+                    <div className="mt-2 ml-8 flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
+                      <Sparkles size={14} className="text-blue-500 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-blue-700">Sugestão</p>
+                        <p className="text-xs text-blue-600 mt-0.5 leading-relaxed">{c.sugestao}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -394,7 +398,7 @@ export function ParticipacaoDetalhe() {
         </div>
       )}
 
-      {/* Documentos Exigidos (expandível) */}
+      {/* 5. Documentos Exigidos pelo Edital (expandível) */}
       {docsExigidos.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-4">
           <button
@@ -419,210 +423,94 @@ export function ParticipacaoDetalhe() {
         </div>
       )}
 
-      {/* Painel de análise manual */}
+      {/* 6. Proposta — rascunho automático */}
+      {p.rascunhoProposta && (
+        <PropostaCard rascunho={p.rascunhoProposta} />
+      )}
+
+      {/* 7. Documentos do Processo — arquivos encontrados (referência) */}
+      <DocumentosProcessoSection
+        documentos={p.documentosProcesso ?? []}
+        participacaoId={p.id}
+        onUploadSuccess={(data) => { setParticipacao(data); addToast('success', 'Documentos adicionados e analisados!'); }}
+        onUploadError={(msg) => addToast('error', msg)}
+      />
+
+      {/* Painel de análise documental */}
       {docsExigidos.length === 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-4 shadow-sm">
           <div className="flex items-start gap-3 mb-3">
             <AlertCircle size={20} className="text-amber-600 mt-0.5 shrink-0" />
             <div>
-              <p className="font-semibold text-amber-800">
-                {p.editalUrl && !p.editalUrl.startsWith('upload://') ? 'Falha na análise do edital' : 'Sem análise de edital'}
-              </p>
+              <p className="font-semibold text-amber-800">Análise documental pendente</p>
               <p className="text-sm text-amber-700 mt-0.5">
-                {p.editalUrl && !p.editalUrl.startsWith('upload://')
-                  ? 'O sistema não conseguiu baixar ou processar o PDF do edital. Use o robô para buscar automaticamente, informe outro link ou envie o PDF.'
-                  : 'Use o robô para buscar automaticamente, cole o link do PDF ou faça upload do arquivo para disparar a análise.'}
+                O robô navega até o portal, encontra todos os documentos do processo, baixa, classifica e analisa cada um automaticamente.
               </p>
             </div>
           </div>
 
-          {p.editalUrl && !p.editalUrl.startsWith('upload://') && (
-            <div className="mb-3">
-              <p className="text-xs text-amber-600 mb-1">URL utilizada:</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs bg-white/60 border border-amber-200 rounded px-2 py-1.5 text-amber-800 truncate">
-                  {p.editalUrl}
-                </code>
-                <button
-                  onClick={handleRetentarAnalise}
-                  disabled={analisando}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-800 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {analisando ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                  Tentar novamente
-                </button>
+          {/* Log do robô */}
+          {roboLog.length > 0 && (
+            <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden mb-3">
+              <div className="flex items-center gap-2 px-4 py-2 bg-slate-800 border-b border-slate-700">
+                <div className="flex gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-red-500" />
+                  <span className="w-3 h-3 rounded-full bg-yellow-500" />
+                  <span className="w-3 h-3 rounded-full bg-green-500" />
+                </div>
+                <span className="text-xs text-slate-400 font-mono ml-2">robô — análise documental</span>
+                {analisando && <Loader2 size={12} className="animate-spin text-purple-400 ml-auto" />}
+              </div>
+              <div className="p-3 max-h-96 overflow-y-auto font-mono text-xs space-y-0.5">
+                {roboLog.map((entry, i) => (
+                  <RoboLogLine key={i} entry={entry} />
+                ))}
+                <div ref={logEndRef} />
               </div>
             </div>
           )}
 
+          {/* Botão do robô */}
+          <button
+            onClick={handleBuscarViaRobo}
+            disabled={analisando || (!p.portalLink && !p.licitacao?.linkPortal)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50 mb-3"
+          >
+            {analisando ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Robô trabalhando...
+              </>
+            ) : roboLog.length > 0 ? (
+              <>
+                <RefreshCw size={16} />
+                Tentar Novamente
+              </>
+            ) : (
+              <>
+                <Bot size={16} />
+                Iniciar Análise Automática
+              </>
+            )}
+          </button>
+
+          {!p.portalLink && !p.licitacao?.linkPortal && (
+            <p className="text-xs text-red-600 text-center mb-3">
+              Sem link do portal disponível. Envie os documentos manualmente abaixo.
+            </p>
+          )}
+
+          {/* Upload manual de documentos */}
           <div className="border-t border-amber-200 pt-3">
-            <div className="flex gap-1 mb-3 bg-amber-100 rounded-lg p-0.5">
-              <button
-                onClick={() => setEditalTab('robo')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  editalTab === 'robo' ? 'bg-white text-amber-900 shadow-sm' : 'text-amber-700 hover:text-amber-900'
-                }`}
-              >
-                <Bot size={13} /> Buscar com Robô
-              </button>
-              <button
-                onClick={() => setEditalTab('link')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  editalTab === 'link' ? 'bg-white text-amber-900 shadow-sm' : 'text-amber-700 hover:text-amber-900'
-                }`}
-              >
-                <Link2 size={13} /> Informar link
-              </button>
-              <button
-                onClick={() => setEditalTab('upload')}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  editalTab === 'upload' ? 'bg-white text-amber-900 shadow-sm' : 'text-amber-700 hover:text-amber-900'
-                }`}
-              >
-                <Upload size={13} /> Enviar PDF
-              </button>
-            </div>
-
-            {editalTab === 'robo' && (
-              <div className="space-y-3">
-                {roboLog.length === 0 ? (
-                  <div className="bg-white rounded-lg border border-amber-200 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
-                        <Bot size={20} className="text-purple-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-800">Busca automática com robô</p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          O robô abre um navegador invisível, navega até o portal, encontra o PDF do edital, baixa e analisa tudo automaticamente.
-                        </p>
-                        {(p.portalLink || p.licitacao?.linkPortal) && (
-                          <p className="text-xs text-purple-600 mt-1.5 font-medium truncate">
-                            Portal: {p.portalLink || p.licitacao?.linkPortal}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-800 border-b border-slate-700">
-                      <div className="flex gap-1.5">
-                        <span className="w-3 h-3 rounded-full bg-red-500" />
-                        <span className="w-3 h-3 rounded-full bg-yellow-500" />
-                        <span className="w-3 h-3 rounded-full bg-green-500" />
-                      </div>
-                      <span className="text-xs text-slate-400 font-mono ml-2">robô — busca de edital</span>
-                      {analisando && <Loader2 size={12} className="animate-spin text-purple-400 ml-auto" />}
-                    </div>
-                    <div className="p-3 max-h-72 overflow-y-auto font-mono text-xs space-y-0.5">
-                      {roboLog.map((entry, i) => (
-                        <RoboLogLine key={i} entry={entry} />
-                      ))}
-                      <div ref={logEndRef} />
-                    </div>
-                  </div>
-                )}
-                <button
-                  onClick={handleBuscarViaRobo}
-                  disabled={analisando || (!p.portalLink && !p.licitacao?.linkPortal)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50"
-                >
-                  {analisando ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Robô trabalhando...
-                    </>
-                  ) : roboLog.length > 0 ? (
-                    <>
-                      <RefreshCw size={16} />
-                      Tentar Novamente
-                    </>
-                  ) : (
-                    <>
-                      <Bot size={16} />
-                      Iniciar Busca Automática
-                    </>
-                  )}
-                </button>
-                {!p.portalLink && !p.licitacao?.linkPortal && (
-                  <p className="text-xs text-red-600 text-center">
-                    Sem link do portal disponível. Use as opções de link manual ou upload.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {editalTab === 'link' && (
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={editalUrlManual}
-                  onChange={(e) => setEditalUrlManual(e.target.value)}
-                  placeholder="https://... cole o link direto do PDF do edital"
-                  className="flex-1 px-3 py-2 border border-amber-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none placeholder:text-amber-400"
-                  disabled={analisando}
-                />
-                <button
-                  onClick={handleAnalisarManual}
-                  disabled={analisando || !editalUrlManual.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 whitespace-nowrap"
-                >
-                  {analisando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  Analisar
-                </button>
-              </div>
-            )}
-
-            {editalTab === 'upload' && (
-              <div className="space-y-2">
-                <label
-                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-                    editalFile
-                      ? 'border-purple-400 bg-purple-50'
-                      : 'border-amber-300 bg-white hover:border-amber-400 hover:bg-amber-50/50'
-                  } ${analisando ? 'opacity-50 pointer-events-none' : ''}`}
-                >
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    className="hidden"
-                    disabled={analisando}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) setEditalFile(f);
-                    }}
-                  />
-                  {editalFile ? (
-                    <>
-                      <FileText size={24} className="text-purple-500" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium text-purple-800">{editalFile.name}</p>
-                        <p className="text-xs text-purple-600 mt-0.5">
-                          {(editalFile.size / 1024 / 1024).toFixed(2)} MB — Clique para trocar
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={24} className="text-amber-500" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium text-amber-800">Clique para selecionar o PDF</p>
-                        <p className="text-xs text-amber-600 mt-0.5">ou arraste e solte aqui (máx. 50MB)</p>
-                      </div>
-                    </>
-                  )}
-                </label>
-                <button
-                  onClick={handleUploadEdital}
-                  disabled={analisando || !editalFile}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
-                >
-                  {analisando ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                  Enviar e Analisar Edital
-                </button>
-              </div>
-            )}
+            <p className="text-xs font-medium text-amber-800 mb-2">
+              Ou envie documentos manualmente (edital, anexos, retificações, etc.)
+            </p>
+            <UploadMultiplosDocs
+              participacaoId={p.id}
+              analisando={analisando}
+              onSuccess={(data) => { setParticipacao(data); addToast('success', 'Documentos enviados e analisados!'); }}
+              onError={(msg) => addToast('error', msg)}
+            />
           </div>
         </div>
       )}
@@ -697,6 +585,369 @@ function PrazoItem({ label, value }: { label: string; value: string | null }) {
       ) : (
         <p className="text-sm text-slate-300">—</p>
       )}
+    </div>
+  );
+}
+
+const TIPO_DOC_PROCESSO: Record<TipoDocumentoProcesso, { label: string; color: string; bg: string }> = {
+  EDITAL: { label: 'Edital', color: 'text-blue-700', bg: 'bg-blue-100' },
+  RETIFICACAO: { label: 'Retificação', color: 'text-red-700', bg: 'bg-red-100' },
+  ESCLARECIMENTO: { label: 'Esclarecimento', color: 'text-amber-700', bg: 'bg-amber-100' },
+  IMPUGNACAO: { label: 'Impugnação', color: 'text-orange-700', bg: 'bg-orange-100' },
+  TERMO_REFERENCIA: { label: 'Termo de Referência', color: 'text-indigo-700', bg: 'bg-indigo-100' },
+  ORCAMENTO: { label: 'Orçamento', color: 'text-green-700', bg: 'bg-green-100' },
+  ATA: { label: 'Ata', color: 'text-slate-700', bg: 'bg-slate-100' },
+  RECURSO: { label: 'Recurso', color: 'text-purple-700', bg: 'bg-purple-100' },
+  RESULTADO: { label: 'Resultado', color: 'text-teal-700', bg: 'bg-teal-100' },
+  CONTRATO: { label: 'Contrato', color: 'text-cyan-700', bg: 'bg-cyan-100' },
+  OUTRO: { label: 'Outro', color: 'text-slate-600', bg: 'bg-slate-100' },
+};
+
+const RELEVANCIA_STYLES: Record<string, string> = {
+  critica: 'border-l-red-500 bg-red-50/50',
+  alta: 'border-l-amber-400 bg-amber-50/30',
+  normal: 'border-l-slate-200',
+  baixa: 'border-l-slate-100',
+};
+
+function DocumentosProcessoSection({ documentos, participacaoId, onUploadSuccess, onUploadError }: {
+  documentos: DocumentoProcesso[];
+  participacaoId: string;
+  onUploadSuccess: (data: Participacao) => void;
+  onUploadError: (msg: string) => void;
+}) {
+  const [expandido, setExpandido] = useState<string | null>(null);
+  const temRetificacao = documentos.some((d) => d.tipo === 'RETIFICACAO');
+  const analisados = documentos.filter((d) => d.analisado).length;
+  const naoAnalisados = documentos.length - analisados;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <FolderOpen size={18} className="text-indigo-600" />
+        <h2 className="font-semibold text-slate-900">Documentos do Processo</h2>
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+            {analisados} analisado{analisados !== 1 ? 's' : ''}
+          </span>
+          {naoAnalisados > 0 && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+              {naoAnalisados} pendente{naoAnalisados !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {temRetificacao && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+          <AlertTriangle size={14} className="text-red-500 shrink-0" />
+          <p className="text-xs font-semibold text-red-800">Retificação encontrada — requisitos podem ter sido alterados</p>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        {documentos.map((doc) => {
+          const tipoCfg = TIPO_DOC_PROCESSO[doc.tipo] || TIPO_DOC_PROCESSO.OUTRO;
+          const relStyle = RELEVANCIA_STYLES[doc.relevancia] || '';
+          const impacto = doc.analiseImpacto as any;
+          const temImpacto = impacto && (impacto.alteracoes?.length > 0 || impacto.resumoConteudo);
+          const aberto = expandido === doc.id;
+
+          return (
+            <div key={doc.id}>
+              <div
+                className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border border-l-4 ${relStyle} hover:bg-slate-50 transition-colors ${temImpacto ? 'cursor-pointer' : ''}`}
+                onClick={() => temImpacto && setExpandido(aberto ? null : doc.id)}
+              >
+                {temImpacto && (
+                  <ChevronDown size={12} className={`text-slate-400 shrink-0 transition-transform ${aberto ? 'rotate-180' : ''}`} />
+                )}
+                <span className="text-sm text-slate-800 truncate flex-1">{doc.nomeArquivo}</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${tipoCfg.bg} ${tipoCfg.color}`}>
+                  {tipoCfg.label}
+                </span>
+                {doc.relevancia === 'critica' && doc.tipo !== 'EDITAL' && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 shrink-0">
+                    CRÍTICO
+                  </span>
+                )}
+                {doc.analisado && (
+                  <CheckCircle2 size={12} className="text-green-500 shrink-0" title="Analisado" />
+                )}
+                {doc.urlDownload && (
+                  <a
+                    href={doc.urlDownload}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:text-blue-700 shrink-0"
+                    title="Baixar"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Download size={12} />
+                  </a>
+                )}
+              </div>
+
+              {aberto && impacto && (
+                <div className="ml-6 mt-1 mb-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+                  {impacto.resumoConteudo && (
+                    <p className="text-slate-700">{impacto.resumoConteudo}</p>
+                  )}
+                  {impacto.alteracoes?.length > 0 && (
+                    <div>
+                      <p className="font-semibold text-slate-600 mb-0.5">Alterações:</p>
+                      <ul className="list-disc list-inside text-slate-600 space-y-0.5">
+                        {impacto.alteracoes.map((alt: string, i: number) => (
+                          <li key={i}>{alt}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {impacto.novosDocumentosExigidos?.length > 0 && (
+                    <p className="text-red-700 font-medium">+ Novos docs exigidos: {impacto.novosDocumentosExigidos.join(', ')}</p>
+                  )}
+                  {impacto.documentosRemovidos?.length > 0 && (
+                    <p className="text-green-700 font-medium">− Docs removidos: {impacto.documentosRemovidos.join(', ')}</p>
+                  )}
+                  {impacto.prazosAlterados?.length > 0 && (
+                    <p className="text-amber-700 font-medium">Prazos alterados: {impacto.prazosAlterados.join(', ')}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Upload de documentos adicionais */}
+      <div className="border-t border-slate-100 pt-3 mt-3">
+        <p className="text-xs font-medium text-slate-500 mb-2">
+          {documentos.length > 0
+            ? 'Adicionar mais documentos manualmente'
+            : 'Enviar documentos do processo (edital, anexos, retificações, etc.)'}
+        </p>
+        <UploadMultiplosDocs
+          participacaoId={participacaoId}
+          analisando={false}
+          onSuccess={onUploadSuccess}
+          onError={onUploadError}
+        />
+      </div>
+    </div>
+  );
+}
+
+const RISCO_CORES: Record<string, { bg: string; text: string; bar: string }> = {
+  baixo: { bg: 'bg-green-50', text: 'text-green-700', bar: 'bg-green-500' },
+  moderado: { bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500' },
+  alto: { bg: 'bg-orange-50', text: 'text-orange-700', bar: 'bg-orange-500' },
+  critico: { bg: 'bg-red-50', text: 'text-red-700', bar: 'bg-red-500' },
+};
+
+function RiscoRecomendacaoCard({ analiseRisco, scoreRecomendacao }: {
+  analiseRisco: AnaliseRisco | null;
+  scoreRecomendacao: number | null;
+}) {
+  const [expandRiscos, setExpandRiscos] = useState(false);
+  const risco = analiseRisco;
+  const riscoCfg = risco ? RISCO_CORES[risco.nivelRisco] || RISCO_CORES.moderado : RISCO_CORES.moderado;
+
+  const recColor = scoreRecomendacao !== null
+    ? scoreRecomendacao >= 70 ? 'text-green-600' : scoreRecomendacao >= 40 ? 'text-amber-600' : 'text-red-600'
+    : 'text-slate-400';
+  const recLabel = scoreRecomendacao !== null
+    ? scoreRecomendacao >= 70 ? 'Participar' : scoreRecomendacao >= 40 ? 'Avaliar' : 'Evitar'
+    : '—';
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      {/* Risco */}
+      {risco && (
+        <div className={`rounded-xl border p-5 shadow-sm ${riscoCfg.bg} border-slate-200`}>
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldAlert size={18} className={riscoCfg.text} />
+            <h2 className="font-semibold text-slate-900">Análise de Risco</h2>
+          </div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="text-3xl font-bold tabular-nums" style={{ color: riscoCfg.bar.replace('bg-', 'var(--') }}>{risco.scoreRisco}</div>
+            <div>
+              <span className={`text-sm font-bold uppercase ${riscoCfg.text}`}>{risco.nivelRisco}</span>
+              <p className="text-xs text-slate-500">{risco.riscos.length} risco(s) identificado(s)</p>
+            </div>
+            <div className="flex-1 ml-3">
+              <div className="w-full bg-slate-200 rounded-full h-2">
+                <div className={`h-2 rounded-full ${riscoCfg.bar}`} style={{ width: `${risco.scoreRisco}%` }} />
+              </div>
+            </div>
+          </div>
+
+          {risco.riscos.length > 0 && (
+            <div>
+              <button
+                onClick={() => setExpandRiscos(!expandRiscos)}
+                className="text-xs font-medium text-slate-600 flex items-center gap-1 hover:text-slate-800"
+              >
+                <ChevronDown size={12} className={expandRiscos ? 'rotate-180' : ''} />
+                {expandRiscos ? 'Ocultar' : 'Ver'} riscos
+              </button>
+              {expandRiscos && (
+                <div className="mt-2 space-y-1.5">
+                  {risco.riscos.map((r, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs bg-white/60 rounded-lg p-2 border border-slate-200">
+                      <span className={`font-bold shrink-0 px-1.5 py-0.5 rounded ${
+                        r.severidade === 'alta' ? 'bg-red-100 text-red-700'
+                          : r.severidade === 'media' ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>{r.severidade}</span>
+                      <div>
+                        <span className="font-medium text-slate-700">{r.categoria}:</span>{' '}
+                        <span className="text-slate-600">{r.descricao}</span>
+                        {r.clausula && <span className="text-slate-400 ml-1">({r.clausula})</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recomendação */}
+      {scoreRecomendacao !== null && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            {scoreRecomendacao >= 70 ? <ThumbsUp size={18} className="text-green-600" /> : <ThumbsDown size={18} className={recColor} />}
+            <h2 className="font-semibold text-slate-900">Recomendação</h2>
+          </div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className={`text-3xl font-bold tabular-nums ${recColor}`}>{scoreRecomendacao}</div>
+            <div>
+              <span className={`text-sm font-bold uppercase ${recColor}`}>{recLabel}</span>
+              <p className="text-xs text-slate-500">de 0 a 100</p>
+            </div>
+            <div className="flex-1 ml-3">
+              <div className="w-full bg-slate-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full ${scoreRecomendacao >= 70 ? 'bg-green-500' : scoreRecomendacao >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                  style={{ width: `${scoreRecomendacao}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PropostaCard({ rascunho }: { rascunho: string }) {
+  const [expandido, setExpandido] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  function copiar() {
+    navigator.clipboard.writeText(rascunho);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <ClipboardList size={18} className="text-indigo-600" />
+        <h2 className="font-semibold text-slate-900">Rascunho de Proposta</h2>
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={copiar}
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded hover:bg-slate-100"
+          >
+            <Copy size={12} />
+            {copiado ? 'Copiado!' : 'Copiar'}
+          </button>
+          <button
+            onClick={() => setExpandido(!expandido)}
+            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+          >
+            <ChevronDown size={12} className={expandido ? 'rotate-180' : ''} />
+            {expandido ? 'Recolher' : 'Expandir'}
+          </button>
+        </div>
+      </div>
+      <div className={`prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap text-xs leading-relaxed ${
+        expandido ? '' : 'max-h-40 overflow-hidden relative'
+      }`}>
+        {rascunho}
+        {!expandido && (
+          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent" />
+        )}
+      </div>
+      {!expandido && (
+        <button
+          onClick={() => setExpandido(true)}
+          className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+        >
+          Ver proposta completa
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ResumoEditalCard({ resumo }: { resumo: ResumoEdital }) {
+  return (
+    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-5 mb-4 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+          <Sparkles size={16} className="text-purple-600" />
+        </div>
+        <div>
+          <h2 className="font-semibold text-slate-900">Resumo Executivo</h2>
+          <p className="text-xs text-purple-600">Gerado por IA</p>
+        </div>
+      </div>
+
+      <p className="text-sm text-slate-700 leading-relaxed mb-4">
+        {resumo.resumo}
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {resumo.objeto && (
+          <div className="flex items-start gap-2.5 bg-white/70 rounded-lg p-3">
+            <BookOpen size={16} className="text-indigo-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400 font-medium">Objeto</p>
+              <p className="text-sm text-slate-800">{resumo.objeto}</p>
+            </div>
+          </div>
+        )}
+        {resumo.modalidade && (
+          <div className="flex items-start gap-2.5 bg-white/70 rounded-lg p-3">
+            <Gavel size={16} className="text-indigo-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400 font-medium">Modalidade</p>
+              <p className="text-sm text-slate-800">{resumo.modalidade}</p>
+            </div>
+          </div>
+        )}
+        {resumo.valorEstimado && (
+          <div className="flex items-start gap-2.5 bg-white/70 rounded-lg p-3">
+            <DollarSign size={16} className="text-green-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400 font-medium">Valor Estimado</p>
+              <p className="text-sm text-slate-800 font-medium">{resumo.valorEstimado}</p>
+            </div>
+          </div>
+        )}
+        {resumo.criterioJulgamento && (
+          <div className="flex items-start gap-2.5 bg-white/70 rounded-lg p-3">
+            <Scale size={16} className="text-amber-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs text-slate-400 font-medium">Critério de Julgamento</p>
+              <p className="text-sm text-slate-800">{resumo.criterioJulgamento}</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -850,6 +1101,98 @@ const LOG_TIPO_PREFIX: Record<string, string> = {
   erro: '✗',
   detalhe: '  •',
 };
+
+function UploadMultiplosDocs({ participacaoId, analisando, onSuccess, onError }: {
+  participacaoId: string;
+  analisando: boolean;
+  onSuccess: (data: Participacao) => void;
+  onError: (msg: string) => void;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  function handleFilesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files;
+    if (!selected) return;
+    setFiles((prev) => [...prev, ...Array.from(selected)]);
+    e.target.value = '';
+  }
+
+  function removeFile(idx: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function handleUpload() {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      files.forEach((f) => formData.append('documentos', f));
+
+      const res = await fetch(`/api/participacoes/${participacaoId}/upload-documentos`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Erro ${res.status}`);
+      }
+      const data: Participacao = await res.json();
+      setFiles([]);
+      onSuccess(data);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Erro ao enviar documentos');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const disabled = analisando || uploading;
+
+  return (
+    <div className="space-y-2">
+      <label
+        className={`flex flex-col items-center justify-center gap-1.5 p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+          files.length > 0 ? 'border-purple-400 bg-purple-50/50' : 'border-amber-300 bg-white hover:border-amber-400'
+        } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+      >
+        <input
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          multiple
+          disabled={disabled}
+          onChange={handleFilesChange}
+        />
+        <Upload size={18} className="text-amber-500" />
+        <p className="text-xs font-medium text-amber-800">Selecionar PDFs (múltiplos)</p>
+      </label>
+
+      {files.length > 0 && (
+        <div className="space-y-1">
+          {files.map((f, i) => (
+            <div key={i} className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 px-2.5 py-1.5">
+              <FileText size={13} className="text-purple-500 shrink-0" />
+              <span className="text-xs text-slate-700 flex-1 truncate">{f.name}</span>
+              <span className="text-[10px] text-slate-400">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+              <button onClick={() => removeFile(i)} className="text-red-400 hover:text-red-600" disabled={disabled}>
+                <XCircle size={13} />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={handleUpload}
+            disabled={disabled}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+          >
+            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            Enviar {files.length} documento(s) e analisar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RoboLogLine({ entry }: { entry: RoboLogEntry }) {
   const color = LOG_TIPO_STYLES[entry.tipo] || 'text-slate-400';

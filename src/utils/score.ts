@@ -1,6 +1,7 @@
 import { encontrarPalavrasOriginais } from "./text.js";
 
-const PESO_TEXTUAL = 0.60;
+const PESO_SEMANTICO = 0.40;
+const PESO_TEXTUAL = 0.20;
 const PESO_GEOGRAFICO = 0.25;
 const PESO_VALOR = 0.15;
 
@@ -76,6 +77,7 @@ function calcularScoreValor(
 export interface ScoreResult {
   score: number;
   scoreTextual: number;
+  scoreSemantico: number;
   scoreGeografico: number;
   scoreValor: number;
   palavrasMatch: string[];
@@ -91,6 +93,7 @@ export function calcularScoreComposto(params: {
   valorMinimo: number | null;
   valorMaximo: number | null;
   valorEstimado: number | null;
+  scoreSemantico?: number;
 }): ScoreResult {
   const textual = calcularScoreTextual(params.stemsEmpresa, params.stemsObjeto);
   const geo = calcularScoreGeografico(
@@ -104,9 +107,22 @@ export function calcularScoreComposto(params: {
     params.valorEstimado
   );
 
-  const scoreTotal = round3(
-    textual.score * PESO_TEXTUAL + geo * PESO_GEOGRAFICO + valor * PESO_VALOR
-  );
+  const semantico = params.scoreSemantico ?? 0;
+  const temSemantico = semantico > 0;
+
+  let scoreTotal: number;
+  if (temSemantico) {
+    scoreTotal = round3(
+      semantico * PESO_SEMANTICO +
+      textual.score * PESO_TEXTUAL +
+      geo * PESO_GEOGRAFICO +
+      valor * PESO_VALOR
+    );
+  } else {
+    scoreTotal = round3(
+      textual.score * 0.60 + geo * 0.25 + valor * 0.15
+    );
+  }
 
   const palavrasMatch = encontrarPalavrasOriginais(
     params.textoObjeto,
@@ -116,6 +132,7 @@ export function calcularScoreComposto(params: {
   return {
     score: scoreTotal,
     scoreTextual: textual.score,
+    scoreSemantico: round3(semantico),
     scoreGeografico: geo,
     scoreValor: valor,
     palavrasMatch,

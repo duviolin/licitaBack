@@ -63,6 +63,7 @@ export async function upsert(
   data: {
     score: number;
     scoreTextual: number;
+    scoreSemantico?: number;
     scoreGeografico: number;
     scoreValor: number;
     palavrasMatch: string[];

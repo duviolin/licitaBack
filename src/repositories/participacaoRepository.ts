@@ -15,6 +15,7 @@ const includeFull = {
     orderBy: { createdAt: "asc" as const },
   },
   prazos: true,
+  documentosProcesso: { orderBy: { createdAt: "asc" as const } },
 } as const;
 
 export async function findByEmpresaAndLicitacao(

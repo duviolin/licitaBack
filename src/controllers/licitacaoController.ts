@@ -85,29 +85,39 @@ export async function iniciarImportacao(
 export async function statusImportacao(
   req: Request,
   res: Response,
+  next: NextFunction
 ) {
-  const job = licitacaoService.obterJobStatus(req.params.jobId as string);
-  if (!job) {
-    res.status(404).json({ error: "Job não encontrado" });
-    return;
+  try {
+    const job = licitacaoService.obterJobStatus(req.params.jobId as string);
+    if (!job) {
+      res.status(404).json({ error: "Job não encontrado" });
+      return;
+    }
+    res.json({
+      status: job.status,
+      progresso: job.progresso,
+      resultado: job.resultado ?? null,
+    });
+  } catch (err) {
+    next(err);
   }
-  res.json({
-    status: job.status,
-    progresso: job.progresso,
-    resultado: job.resultado ?? null,
-  });
 }
 
 export async function cancelarImportacao(
   req: Request,
   res: Response,
+  next: NextFunction
 ) {
-  const ok = licitacaoService.cancelarJob(req.params.jobId as string);
-  if (!ok) {
-    res.status(404).json({ error: "Job não encontrado ou já finalizado" });
-    return;
+  try {
+    const ok = licitacaoService.cancelarJob(req.params.jobId as string);
+    if (!ok) {
+      res.status(404).json({ error: "Job não encontrado ou já finalizado" });
+      return;
+    }
+    res.json({ cancelado: true });
+  } catch (err) {
+    next(err);
   }
-  res.json({ cancelado: true });
 }
 
 export async function listar(

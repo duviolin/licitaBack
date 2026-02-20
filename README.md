@@ -242,6 +242,7 @@ licitaBack/
 | `NODE_ENV` | Não (development) | Ambiente |
 | `PNCP_BASE_URL` | Não | URL base PNCP |
 | `BRASILAPI_BASE_URL` | Não | URL base BrasilAPI |
+| `OPENAI_API_KEY` | Não | Chave da API OpenAI — habilita features de IA |
 
 ---
 
@@ -255,14 +256,34 @@ Concluído
 ├── ✅  Documentos da Empresa (CRUD, tipos, validade)
 ├── ✅  Participação unificada (análise automática de edital + conformidade)
 ├── ✅  Frontend completo (Dashboard, Empresas, Matches, Participações com detalhe)
-└── ✅  Fluxo unificado: Participar → Análise → Conformidade → Acompanhar
+├── ✅  Fluxo unificado: Participar → Análise → Conformidade → Acompanhar
+├── ✅  Robô scraper (Puppeteer) para busca automática de edital PDF
+├── ✅  Seleção inteligente de arquivo via LLM (GPT-4o-mini)
+└── ✅  Terminal ao vivo com progresso do robô (SSE)
 
-Próximos passos
+Fase IA 1 — Extração Inteligente de Edital (~2h) ✅
+├── ✅ 1.1 Extração de requisitos/documentos via LLM (substitui regex)
+├── ✅ 1.2 Extração de prazos e datas via LLM (entende prazos relativos)
+└── ✅ 1.3 Resumo executivo automático do edital
+
+Fase IA 2 — Conformidade Inteligente (~1h) ✅
+├── ✅ 2.1 Matching semântico documento empresa ↔ documento exigido
+└── ✅ 2.2 Sugestões de ação (qual doc falta, onde conseguir)
+
+Fase IA 3 — Matching Semântico (~2h) ✅
+├── ✅ 3.1 Embeddings para perfil da empresa (text-embedding-3-small)
+├── ✅ 3.2 Embeddings para objeto da licitação
+└── ✅ 3.3 Similaridade por cosseno (40% peso no score composto)
+
+Fase IA 4 — Análise de Risco e Proposta (~2h) ✅
+├── ✅ 4.1 Análise de risco do edital (cláusulas, multas, prazos)
+├── ✅ 4.2 Score de recomendação (vale a pena participar?)
+└── ✅ 4.3 Rascunho automático de proposta
+
+Infraestrutura
 ├── ⬜ Autenticação (login, multi-usuário)
 ├── ⬜ Upload de arquivos de documentos (S3/MinIO)
-├── ⬜ Integração real com portais (BLL, BNC, ComprasNet via RPA)
-├── ⬜ OCR para editais escaneados
-├── ⬜ Melhoria na extração de prazos (NLP contextual)
+├── ⬜ OCR para editais escaneados (Tesseract/GPT-4o Vision)
 ├── ⬜ Notificações (prazos vencendo, docs expirando)
 └── ⬜ Dashboard de métricas (taxa de ganho, funil)
 ```

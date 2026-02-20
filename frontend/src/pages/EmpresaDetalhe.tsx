@@ -406,6 +406,10 @@ export function EmpresaDetalhe() {
                   setDocumentos((prev) => prev.filter((d) => d.id !== docId));
                   addToast('success', 'Documento removido');
                 }}
+                onUpdate={(updated) => {
+                  setDocumentos((prev) => prev.map((d) => d.id === updated.id ? updated : d));
+                  addToast('success', 'Documento atualizado');
+                }}
                 onError={(msg) => addToast('error', msg)}
               />
             ))}
@@ -802,13 +806,15 @@ const DOC_STATUS_CFG: Record<DocumentoStatusType, { label: string; color: string
   AUSENTE: { label: 'Ausente', color: 'bg-slate-100 text-slate-500' },
 };
 
-function DocCard({ doc, empresaId, onRemove, onError }: {
+function DocCard({ doc, empresaId, onRemove, onUpdate, onError }: {
   doc: EmpresaDocumento;
   empresaId: string;
   onRemove: (id: string) => void;
+  onUpdate: (updated: EmpresaDocumento) => void;
   onError: (msg: string) => void;
 }) {
   const [removing, setRemoving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const statusCfg = DOC_STATUS_CFG[doc.status] ?? DOC_STATUS_CFG.AUSENTE;
   const tipoLabel = DOC_TIPOS.find((t) => t.value === doc.tipo)?.label ?? doc.tipo;
 
@@ -825,36 +831,60 @@ function DocCard({ doc, empresaId, onRemove, onError }: {
   }
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors">
-      <div className="p-2 rounded-lg bg-teal-50 shrink-0">
-        {doc.status === 'VALIDO' ? (
-          <CheckCircle2 size={16} className="text-green-600" />
-        ) : doc.status === 'VENCIDO' ? (
-          <AlertCircle size={16} className="text-red-500" />
-        ) : (
-          <FileText size={16} className="text-slate-400" />
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-slate-900">{doc.nome}</span>
-          <span className={`text-xs font-bold px-2 py-0.5 rounded ${statusCfg.color}`}>{statusCfg.label}</span>
+    <>
+      <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors">
+        <div className="p-2 rounded-lg bg-teal-50 shrink-0">
+          {doc.status === 'VALIDO' ? (
+            <CheckCircle2 size={16} className="text-green-600" />
+          ) : doc.status === 'VENCIDO' ? (
+            <AlertCircle size={16} className="text-red-500" />
+          ) : (
+            <FileText size={16} className="text-slate-400" />
+          )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
-          <span className="bg-slate-100 px-1.5 py-0.5 rounded">{tipoLabel}</span>
-          {doc.emissor && <span>Emissor: {doc.emissor}</span>}
-          {doc.validade && <span>Validade: {formatDate(doc.validade)}</span>}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-900">{doc.nome}</span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded ${statusCfg.color}`}>{statusCfg.label}</span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+            <span className="bg-slate-100 px-1.5 py-0.5 rounded">{tipoLabel}</span>
+            {doc.emissor && <span>Emissor: {doc.emissor}</span>}
+            {doc.validade && <span>Validade: {formatDate(doc.validade)}</span>}
+            {doc.arquivoUrl && (
+              <a href={doc.arquivoUrl} target="_blank" rel="noopener noreferrer"
+                className="text-blue-600 hover:underline flex items-center gap-0.5">
+                <ExternalLink size={10} /> Arquivo
+              </a>
+            )}
+          </div>
         </div>
+        <button
+          onClick={() => setEditing(true)}
+          className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+          title="Editar documento"
+        >
+          <Settings size={14} />
+        </button>
+        <button
+          onClick={handleRemove}
+          disabled={removing}
+          className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+          title="Remover documento"
+        >
+          {removing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+        </button>
       </div>
-      <button
-        onClick={handleRemove}
-        disabled={removing}
-        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-        title="Remover documento"
-      >
-        {removing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-      </button>
-    </div>
+      {editing && (
+        <EditDocumentoModal
+          doc={doc}
+          empresaId={empresaId}
+          onClose={() => setEditing(false)}
+          onSuccess={(updated) => { onUpdate(updated); setEditing(false); }}
+          onError={onError}
+        />
+      )}
+    </>
   );
 }
 
@@ -869,6 +899,7 @@ function AddDocumentoModal({ open, empresaId, onClose, onSuccess, onError }: {
   const [nome, setNome] = useState('');
   const [validade, setValidade] = useState('');
   const [emissor, setEmissor] = useState('');
+  const [arquivoUrl, setArquivoUrl] = useState('');
   const [loading, setLoading] = useState(false);
 
   function handleTipoChange(value: string) {
@@ -888,6 +919,7 @@ function AddDocumentoModal({ open, empresaId, onClose, onSuccess, onError }: {
       const body: Record<string, unknown> = { tipo, nome };
       if (validade) body.validade = new Date(validade).toISOString();
       if (emissor) body.emissor = emissor;
+      if (arquivoUrl.trim()) body.arquivoUrl = arquivoUrl.trim();
       const result = await api.post<EmpresaDocumento>(`/empresas/${empresaId}/documentos`, body);
       onSuccess(result);
     } catch (err) {
@@ -927,24 +959,39 @@ function AddDocumentoModal({ open, empresaId, onClose, onSuccess, onError }: {
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Data de Validade — opcional</label>
-          <input
-            type="date"
-            value={validade}
-            onChange={(e) => setValidade(e.target.value)}
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            disabled={loading}
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Validade</label>
+            <input
+              type="date"
+              value={validade}
+              onChange={(e) => setValidade(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Emissor</label>
+            <input
+              type="text"
+              value={emissor}
+              onChange={(e) => setEmissor(e.target.value)}
+              placeholder="Receita Federal..."
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Emissor — opcional</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            URL do Arquivo <span className="text-slate-400 font-normal">— opcional</span>
+          </label>
           <input
-            type="text"
-            value={emissor}
-            onChange={(e) => setEmissor(e.target.value)}
-            placeholder="Ex: Receita Federal, Junta Comercial..."
+            type="url"
+            value={arquivoUrl}
+            onChange={(e) => setArquivoUrl(e.target.value)}
+            placeholder="https://exemplo.com/documento.pdf"
             className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             disabled={loading}
           />
@@ -969,6 +1016,118 @@ function AddDocumentoModal({ open, empresaId, onClose, onSuccess, onError }: {
             ) : (
               'Cadastrar Documento'
             )}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function EditDocumentoModal({ doc, empresaId, onClose, onSuccess, onError }: {
+  doc: EmpresaDocumento;
+  empresaId: string;
+  onClose: () => void;
+  onSuccess: (updated: EmpresaDocumento) => void;
+  onError: (msg: string) => void;
+}) {
+  const [nome, setNome] = useState(doc.nome);
+  const [validade, setValidade] = useState(doc.validade ? doc.validade.slice(0, 10) : '');
+  const [emissor, setEmissor] = useState(doc.emissor || '');
+  const [arquivoUrl, setArquivoUrl] = useState(doc.arquivoUrl || '');
+  const [status, setStatus] = useState<DocumentoStatusType>(doc.status);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nome) { onError('Informe o nome do documento'); return; }
+    try {
+      setLoading(true);
+      const body: Record<string, unknown> = { nome, status };
+      if (validade) body.validade = new Date(validade).toISOString();
+      else body.validade = null;
+      if (emissor.trim()) body.emissor = emissor.trim();
+      body.arquivoUrl = arquivoUrl.trim() || '';
+      const result = await api.patch<EmpresaDocumento>(`/empresas/${empresaId}/documentos/${doc.id}`, body);
+      onSuccess(result);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Erro ao atualizar');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Editar Documento" size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo</label>
+          <p className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
+            {DOC_TIPOS.find((t) => t.value === doc.tipo)?.label ?? doc.tipo}
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Nome / Descrição</label>
+          <input
+            type="text" value={nome} onChange={(e) => setNome(e.target.value)}
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Status</label>
+          <select
+            value={status} onChange={(e) => setStatus(e.target.value as DocumentoStatusType)}
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          >
+            <option value="VALIDO">Válido</option>
+            <option value="VENCIDO">Vencido</option>
+            <option value="AUSENTE">Ausente</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Validade</label>
+            <input
+              type="date" value={validade} onChange={(e) => setValidade(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Emissor</label>
+            <input
+              type="text" value={emissor} onChange={(e) => setEmissor(e.target.value)}
+              placeholder="Receita Federal..."
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            URL do Arquivo <span className="text-slate-400 font-normal">— opcional</span>
+          </label>
+          <input
+            type="url" value={arquivoUrl} onChange={(e) => setArquivoUrl(e.target.value)}
+            placeholder="https://exemplo.com/documento.pdf"
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          />
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button type="button" onClick={onClose} disabled={loading}
+            className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
+            Cancelar
+          </button>
+          <button type="submit" disabled={loading || !nome}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors disabled:opacity-50">
+            {loading ? <><Loader2 size={16} className="animate-spin" /> Salvando...</> : 'Salvar Alterações'}
           </button>
         </div>
       </form>

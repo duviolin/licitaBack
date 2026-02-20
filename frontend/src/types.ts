@@ -114,6 +114,7 @@ export interface ConformidadeDocumento {
   empresaDocumentoId: string | null;
   status: ConformidadeStatus;
   observacao: string;
+  sugestao: string;
   createdAt: string;
   documentoExigido?: DocumentoExigido;
   empresaDocumento?: EmpresaDocumento;
@@ -147,6 +148,14 @@ export interface Checklist {
   aptoParaParticipar: boolean;
 }
 
+export interface ResumoEdital {
+  resumo: string;
+  objeto: string;
+  modalidade: string;
+  valorEstimado: string | null;
+  criterioJulgamento: string;
+}
+
 export interface Participacao {
   id: string;
   empresaId: string;
@@ -161,6 +170,11 @@ export interface Participacao {
   documentosOk: boolean;
   checklist: Checklist | null;
   percentualConformidade: number;
+  resumoEdital: ResumoEdital | null;
+  usouLLM: boolean;
+  analiseRisco: AnaliseRisco | null;
+  scoreRecomendacao: number | null;
+  rascunhoProposta: string | null;
   createdAt: string;
   updatedAt: string;
   empresa?: Empresa;
@@ -168,4 +182,50 @@ export interface Participacao {
   documentosExigidos?: DocumentoExigido[];
   conformidades?: ConformidadeDocumento[];
   prazos?: PrazosEdital;
+  documentosProcesso?: DocumentoProcesso[];
+}
+
+export interface AnaliseRisco {
+  scoreRisco: number;
+  nivelRisco: 'baixo' | 'moderado' | 'alto' | 'critico';
+  riscos: Array<{
+    categoria: string;
+    descricao: string;
+    severidade: 'baixa' | 'media' | 'alta';
+    clausula?: string;
+  }>;
+  multasIdentificadas: string[];
+  garantiasExigidas: string[];
+  prazosRiscos: string[];
+}
+
+export type TipoDocumentoProcesso =
+  | 'EDITAL' | 'RETIFICACAO' | 'ESCLARECIMENTO' | 'IMPUGNACAO'
+  | 'TERMO_REFERENCIA' | 'ORCAMENTO' | 'ATA' | 'RECURSO'
+  | 'RESULTADO' | 'CONTRATO' | 'OUTRO';
+
+export interface AnaliseImpactoDoc {
+  resumoConteudo: string;
+  alteracoes: string[];
+  impactoRequisitos: boolean;
+  impactoPrazos: boolean;
+  novosDocumentosExigidos: string[];
+  documentosRemovidos: string[];
+  prazosAlterados: string[];
+}
+
+export interface DocumentoProcesso {
+  id: string;
+  participacaoId: string;
+  nomeArquivo: string;
+  tipo: TipoDocumentoProcesso;
+  classificacaoIA: string;
+  urlDownload: string;
+  tamanhoBytes: number;
+  dataPublicacao: string;
+  resumo: string;
+  relevancia: 'critica' | 'alta' | 'normal' | 'baixa';
+  analisado: boolean;
+  analiseImpacto: AnaliseImpactoDoc | null;
+  createdAt: string;
 }

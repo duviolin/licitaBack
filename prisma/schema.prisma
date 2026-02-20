@@ -57,6 +57,20 @@ enum ConformidadeStatus {
   INCOMPATIVEL
 }
 
+enum TipoDocumentoProcesso {
+  EDITAL
+  RETIFICACAO
+  ESCLARECIMENTO
+  IMPUGNACAO
+  TERMO_REFERENCIA
+  ORCAMENTO
+  ATA
+  RECURSO
+  RESULTADO
+  CONTRATO
+  OUTRO
+}
+
 model Empresa {
   id                     String   @id @default(uuid())
   cnpj                   String   @unique
@@ -70,6 +84,7 @@ model Empresa {
   situacaoCadastral      String   @default("")
 
   stemsCnae              String[]
+  embedding              Float[]  @default([])
 
   palavrasChave          String[] @default([])
   stemsChave             String[] @default([])
@@ -105,6 +120,7 @@ model Licitacao {
   linkEdital       String   @default("")
 
   stemsObjeto      String[]
+  embedding        Float[]  @default([])
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -127,6 +143,7 @@ model LicitacaoMatch {
 
   score           Decimal
   scoreTextual    Decimal
+  scoreSemantico  Decimal @default(0)
   scoreGeografico Decimal
   scoreValor      Decimal
   palavrasMatch   String[]
@@ -159,6 +176,11 @@ model Participacao {
   documentosOk             Boolean @default(false)
   checklist                Json?
   percentualConformidade   Int     @default(0)
+  resumoEdital             Json?
+  usouLLM                  Boolean @default(false)
+  analiseRisco             Json?
+  scoreRecomendacao        Int?
+  rascunhoProposta         String? @db.Text
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -166,9 +188,10 @@ model Participacao {
   empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   licitacao Licitacao @relation(fields: [licitacaoId], references: [id], onDelete: Cascade)
 
-  documentosExigidos DocumentoExigido[]
-  conformidades      ConformidadeDocumento[]
-  prazos             PrazosEdital?
+  documentosExigidos  DocumentoExigido[]
+  conformidades       ConformidadeDocumento[]
+  prazos              PrazosEdital?
+  documentosProcesso  DocumentoProcesso[]
 
   @@unique([empresaId, licitacaoId])
   @@index([empresaId])
@@ -223,6 +246,7 @@ model ConformidadeDocumento {
   empresaDocumentoId String?
   status             ConformidadeStatus
   observacao         String             @default("")
+  sugestao           String             @default("") @db.Text
   createdAt          DateTime           @default(now())
 
   participacao     Participacao     @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
@@ -244,4 +268,25 @@ model PrazosEdital {
   createdAt           DateTime  @default(now())
 
   participacao Participacao @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
+}
+
+model DocumentoProcesso {
+  id               String                @id @default(uuid())
+  participacaoId   String
+  nomeArquivo      String
+  tipo             TipoDocumentoProcesso @default(OUTRO)
+  classificacaoIA  String                @default("")
+  urlDownload      String                @default("")
+  tamanhoBytes     Int                   @default(0)
+  dataPublicacao   String                @default("")
+  resumo           String                @default("") @db.Text
+  relevancia       String                @default("normal")
+  analisado        Boolean               @default(false)
+  analiseImpacto   Json?
+  createdAt        DateTime              @default(now())
+
+  participacao Participacao @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
+
+  @@index([participacaoId])
+  @@index([tipo])
 }

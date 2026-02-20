@@ -12,6 +12,7 @@ import * as matchRepo from "../repositories/licitacaoMatchRepository.js";
 import prisma from "../lib/prisma.js";
 import { processarTexto } from "../utils/text.js";
 import { calcularScoreComposto } from "../utils/score.js";
+import * as embeddingService from "./embeddingService.js";
 import { randomUUID } from "node:crypto";
 
 const ESFERA_MAP: Record<string, string> = {
@@ -213,12 +214,13 @@ async function importarDosPncpComProgresso(
     .map((empresa) => ({
       id: empresa.id,
       stems: [...new Set([...empresa.stemsCnae, ...empresa.stemsChave])],
+      embedding: empresa.embedding,
       uf: empresa.uf,
       ufsInteresse: empresa.ufsInteresse,
       valorMinimo: empresa.valorMinimo ? Number(empresa.valorMinimo) : null,
       valorMaximo: empresa.valorMaximo ? Number(empresa.valorMaximo) : null,
     }))
-    .filter((e) => e.stems.length > 0);
+    .filter((e) => e.stems.length > 0 || e.embedding.length > 0);
 
   if (empresasComStems.length === 0) {
     throw new Error(
@@ -286,16 +288,31 @@ async function importarDosPncpComProgresso(
 
     const dados = mapearContratacao(item);
 
+    // Gerar embedding da licitação
+    let embLicitacao: number[] = [];
+    if (embeddingService.isDisponivel()) {
+      try {
+        embLicitacao = await embeddingService.gerarEmbedding(dados.objeto);
+      } catch { /* silently continue without embedding */ }
+    }
+    (dados as any).embedding = embLicitacao;
+
     const matchesParaSalvar: Array<{
       empresaId: string;
       score: number;
       scoreTextual: number;
+      scoreSemantico: number;
       scoreGeografico: number;
       scoreValor: number;
       palavrasMatch: string[];
     }> = [];
 
     for (const empresa of empresasComStems) {
+      let scoreSemantico = 0;
+      if (embLicitacao.length > 0 && empresa.embedding && empresa.embedding.length > 0) {
+        scoreSemantico = Math.max(0, embeddingService.similaridadeCosseno(empresa.embedding, embLicitacao));
+      }
+
       const result = calcularScoreComposto({
         stemsEmpresa: empresa.stems,
         stemsObjeto: dados.stemsObjeto,
@@ -306,6 +323,7 @@ async function importarDosPncpComProgresso(
         valorMinimo: empresa.valorMinimo,
         valorMaximo: empresa.valorMaximo,
         valorEstimado: dados.valorEstimado ? Number(dados.valorEstimado) : null,
+        scoreSemantico,
       });
 
       if (result.score >= scoreMinimo) {
@@ -313,6 +331,7 @@ async function importarDosPncpComProgresso(
           empresaId: empresa.id,
           score: result.score,
           scoreTextual: result.scoreTextual,
+          scoreSemantico: result.scoreSemantico,
           scoreGeografico: result.scoreGeografico,
           scoreValor: result.scoreValor,
           palavrasMatch: result.palavrasMatch,
@@ -333,6 +352,7 @@ async function importarDosPncpComProgresso(
       await matchRepo.upsert(match.empresaId, licitacao.id, {
         score: match.score,
         scoreTextual: match.scoreTextual,
+        scoreSemantico: match.scoreSemantico,
         scoreGeografico: match.scoreGeografico,
         scoreValor: match.scoreValor,
         palavrasMatch: match.palavrasMatch,
