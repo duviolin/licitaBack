@@ -1,8 +1,8 @@
 # Licitações MVP — Recomendação e Gestão de Licitações Públicas
 
-API backend para recomendar licitações públicas a empresas brasileiras com base em score de aderência NLP.
+Sistema completo (backend + frontend) para recomendar licitações públicas a empresas brasileiras com base em score de aderência NLP.
 
-**Status: ✅ MVP Completo — Todas as 4 etapas implementadas e testadas com dados reais.**
+**Status: ✅ MVP Completo — Backend (4 etapas) + Frontend Dashboard (4 etapas) + Importação Inteligente (Score-First)**
 
 ---
 
@@ -17,145 +17,151 @@ API backend para recomendar licitações públicas a empresas brasileiras com ba
 | @nlpjs/lang-pt | Tokenização, stemming e stopwords PT-BR |
 | BrasilAPI | Consulta CNPJ (gratuita, sem auth) |
 | PNCP | Portal Nacional de Contratações Públicas |
+| React 19 + Vite 7 | Frontend SPA |
+| Tailwind CSS 4 | Estilização |
+| Lucide React | Ícones |
+| React Router 7 | Navegação |
 
 ---
 
 ## Setup
 
 ```bash
-# 1. Instalar dependências
+# 1. Instalar dependências (backend + frontend)
 npm install
+cd frontend && npm install && cd ..
 
 # 2. Configurar variáveis de ambiente
 cp .env.example .env.development
 # Editar .env.development com sua DATABASE_URL
 
-# 3. Gerar client + aplicar schema + iniciar servidor
+# 3. Iniciar backend (porta 3000)
 npm run dev
+
+# 4. Iniciar frontend (porta 5173 com proxy para API)
+npm run dev:front
 ```
 
-O script `dev-setup.js` faz automaticamente: `prisma generate` → `prisma db push` → inicia o servidor com hot-reload.
+### Produção
+```bash
+npm run build:all   # Compila backend + frontend
+npm run start       # Express serve API + frontend estático
+```
 
 ---
 
 ## Scripts
 
-| Script | Comando | Descrição |
-|---|---|---|
-| `dev` | `node scripts/dev-setup.js && cross-env NODE_ENV=development tsx watch src/server.ts` | Setup + servidor com hot-reload |
-| `build` | `prisma generate && tsc` | Build para produção |
-| `start` | `npm run db:generate && npm run db:migrate && node dist/server.js` | Produção |
-| `db:generate` | `prisma generate` | Gerar Prisma Client |
-| `db:migrate` | `prisma migrate deploy` | Aplicar migrations |
-| `db:migrate:dev` | `prisma migrate dev` | Criar migration (dev) |
-| `db:push` | `prisma db push` | Sincronizar schema (sem migration) |
-| `db:studio` | `prisma studio` | Interface visual do banco |
+| Script | Descrição |
+|---|---|
+| `dev` | Setup automático + servidor backend com hot-reload |
+| `dev:front` | Dev server frontend (Vite + proxy) |
+| `build` | Build backend (Prisma generate + tsc) |
+| `build:front` | Build frontend (tsc + vite build) |
+| `build:all` | Build backend + frontend |
+| `start` | Produção (migrate + serve) |
+| `db:generate` | Gerar Prisma Client |
+| `db:migrate` | Aplicar migrations |
+| `db:push` | Sincronizar schema |
+| `db:studio` | Interface visual do banco |
 
 ---
 
 ## Arquitetura
 
 ```
-Routes → Controllers → Services → Repositories → Prisma/DB
-                          ↓
-                    Clients (APIs externas)
-                    Utils (NLP, Score)
-```
-
-3 camadas simples. Sem DDD, sem abstrações desnecessárias.
-
----
-
-## Estrutura do Projeto
-
-```
-licitaBack/
-├── prisma/
-│   └── schema.prisma                  # 4 models + enum
-├── prisma.config.ts                   # Config Prisma v7 (datasource URL)
-├── scripts/
-│   └── dev-setup.js                   # Setup automático (generate + push + retry)
-├── src/
-│   ├── config/
-│   │   ├── load-env.ts                # Carrega .env.{NODE_ENV} com fallback
-│   │   └── env.ts                     # Variáveis tipadas (requireEnv/getEnvOptional)
-│   ├── lib/
-│   │   └── prisma.ts                  # Singleton PrismaClient com adapter-pg
-│   ├── generated/
-│   │   └── prisma/                    # Prisma Client gerado (gitignored)
-│   ├── types/
-│   │   └── nlpjs.d.ts                 # Declarações @nlpjs/lang-pt
-│   ├── clients/
-│   │   ├── brasilApiClient.ts         ✅ Consulta CNPJ na BrasilAPI
-│   │   └── pncpClient.ts             ✅ Importação PNCP com paginação + retry
-│   ├── utils/
-│   │   ├── text.ts                    ✅ NLP: processarTexto, extrairStems, encontrarPalavrasOriginais
-│   │   └── score.ts                   ✅ Score composto: textual (60%) + geográfico (25%) + valor (15%)
-│   ├── repositories/
-│   │   ├── empresaRepository.ts       ✅ CRUD Empresa
-│   │   ├── licitacaoMatchRepository.ts ✅ CRUD LicitacaoMatch
-│   │   ├── licitacaoRepository.ts     ✅ CRUD Licitacao + filtros ricos + paginação
-│   │   └── participacaoRepository.ts  ✅ CRUD Participacao + filtros
-│   ├── services/
-│   │   ├── empresaService.ts          ✅ Cadastro CNPJ + preferências + recálculo matches
-│   │   ├── licitacaoService.ts        ✅ Importação PNCP + cálculo matches + listagem
-│   │   └── participacaoService.ts     ✅ Registro + atualização status + listagem
-│   ├── controllers/
-│   │   ├── empresaController.ts       ✅ Validação + delegação
-│   │   ├── licitacaoController.ts     ✅ Validação datas + delegação
-│   │   └── participacaoController.ts  ✅ Validação + delegação
-│   ├── routes/
-│   │   ├── empresaRoutes.ts           ✅ 5 endpoints
-│   │   ├── licitacaoRoutes.ts         ✅ 3 endpoints
-│   │   └── participacaoRoutes.ts      ✅ 3 endpoints
-│   ├── middleware/
-│   │   └── errorHandler.ts            ✅ Prisma errors + heurísticas de mensagem
-│   ├── app.ts                         ✅ Express app com health + rotas + error handler
-│   └── server.ts                      ✅ Entry point com load-env
-├── API.json                           ✅ Coleção Insomnia (importar para testar)
-├── .env.development                   # Config Neon (gitignored)
-├── .env.example                       # Template de variáveis
-├── .gitignore
-├── package.json
-├── tsconfig.json
-└── README.md
+┌──────────────────────────────────────────────┐
+│                  Frontend                     │
+│  React 19 + Vite + Tailwind + React Router   │
+│  (porta 5173 dev / estático em produção)      │
+└───────────────────┬──────────────────────────┘
+                    │ /api/* proxy
+┌───────────────────▼──────────────────────────┐
+│                  Backend                      │
+│  Express 5 + TypeScript ESM                   │
+│  Routes → Controllers → Services → Repos      │
+│                    ↓                          │
+│              Clients (BrasilAPI, PNCP)         │
+│              Utils (NLP, Score)                │
+└───────────────────┬──────────────────────────┘
+                    │
+              PostgreSQL (Neon)
 ```
 
 ---
 
-## Endpoints — Referência Completa
+## Importação Inteligente (Score-First)
+
+O sistema usa uma abordagem inteligente para importação de licitações:
+
+```
+PNCP → Busca licitações → Calcula score EM MEMÓRIA → Só salva as relevantes
+```
+
+| Aspecto | Como funciona |
+|---|---|
+| **Pre-filtering** | Score é calculado ANTES de salvar no banco |
+| **Score mínimo** | Configurável (0% a 70%, padrão 30%) |
+| **Por empresa** | Pode importar focado em uma empresa específica |
+| **Resultado detalhado** | Mostra: consultadas, duplicadas, descartadas (score baixo), importadas |
+| **Banco limpo** | Só licitações relevantes ocupam espaço |
+
+### Exemplo de resultado:
+```
+327 consultadas no PNCP
+ → 12 já existiam (duplicatas)
+ → 270 descartadas (score < 30%)
+ → 45 importadas (relevantes)
+ → 68 matches calculados
+```
+
+---
+
+## Frontend — Dashboard
+
+5 páginas com interface auto-explicativa:
+
+| Página | Funcionalidades |
+|---|---|
+| **Dashboard** | Cards de resumo, top matches, participações recentes, fluxo de uso |
+| **Empresas** | Lista com busca/filtro, cadastro por CNPJ, editar preferências (tags), detalhe com matches |
+| **Licitações** | Lista paginada, filtros avançados (UF, modalidade, esfera, situação), importar do PNCP |
+| **Matches** | Visão cruzada empresa×licitação, filtro por score, breakdown (textual/geo/valor), tooltips |
+| **Participações** | CRUD completo, status visual (Analisando→Enviada→Disputa→Ganho/Perdido), filtros |
+
+Todos os formulários possuem textos explicativos detalhados sobre cada campo.
+
+---
+
+## Endpoints — Referência
 
 ### Health Check
-
 | Método | Endpoint | Descrição |
 |---|---|---|
 | GET | `/health` | Status da API |
 
 ### Empresas — `/empresas`
-
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/empresas/cnpj` | Cadastra empresa via BrasilAPI. Gera stems NLP dos CNAEs. Calcula matches. |
-| PATCH | `/empresas/:id/preferencias` | Atualiza palavras-chave, UFs, modalidades, faixa de valor. Recalcula matches. |
-| GET | `/empresas` | Lista todas as empresas. |
-| GET | `/empresas/:id` | Detalhe completo (stems, preferências). |
-| GET | `/empresas/:id/matches` | Matches ordenados por score. Filtros: `scoreMin`, `apenasAbertas`, `limit`. |
+| POST | `/empresas/cnpj` | Cadastra via BrasilAPI. Gera stems NLP. Calcula matches. |
+| PATCH | `/empresas/:id/preferencias` | Atualiza preferências. Recalcula matches. |
+| GET | `/empresas` | Lista todas. |
+| GET | `/empresas/:id` | Detalhe completo. |
+| GET | `/empresas/:id/matches` | Matches por score. Filtros: `scoreMin`, `apenasAbertas`, `limit`. |
 
 ### Licitações — `/licitacoes`
-
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/licitacoes/importar` | Importa do PNCP com paginação. Calcula matches para todas as empresas. |
-| GET | `/licitacoes` | Filtros ricos: `empresaId`, `scoreMin`, `modalidade`, `uf`, `esfera`, `situacao`, `valorMin/Max`, `apenasAbertas`, `dataMinima`, `page/limit`. |
-| GET | `/licitacoes/:id` | Detalhe com matches por empresa (score breakdown). |
+| POST | `/licitacoes/importar` | **Importação Inteligente.** Params: `dataInicial`, `dataFinal`, `uf`, `codigoModalidade`, `scoreMinimo` (0-1, default 0.3), `empresaId` (opcional). |
+| GET | `/licitacoes` | Filtros: `empresaId`, `scoreMin`, `modalidade`, `uf`, `esfera`, `situacao`, `valorMin/Max`, `apenasAbertas`, `dataMinima`, `page/limit`. |
+| GET | `/licitacoes/:id` | Detalhe com matches por empresa. |
 
 ### Participações — `/participacoes`
-
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/participacoes` | Registra participação (status inicial: ANALISANDO). Valida empresa/licitação existem, bloqueia duplicata (409). |
-| GET | `/participacoes` | Lista com filtros: `empresaId`, `status`. Inclui dados da licitação. |
-| PATCH | `/participacoes/:id` | Atualiza `status`, `valorProposta`, `observacoes`. Status: ANALISANDO, PROPOSTA_ENVIADA, EM_DISPUTA, GANHO, PERDIDO. |
+| POST | `/participacoes` | Registra (status: ANALISANDO). Valida empresa+licitação, bloqueia duplicata. |
+| GET | `/participacoes` | Filtros: `empresaId`, `status`. |
+| PATCH | `/participacoes/:id` | Atualiza `status`, `valorProposta`, `observacoes`. |
 
 ---
 
@@ -167,82 +173,52 @@ scoreTotal = scoreTextual × 0.60 + scoreGeográfico × 0.25 + scoreValor × 0.1
 
 | Componente | Peso | Lógica |
 |---|---|---|
-| **Textual** | 60% | Jaccard ponderado entre stems da empresa (CNAEs + keywords) e stems do objeto da licitação |
-| **Geográfico** | 25% | 1.0 (UF match) / 0.3 (sem preferência, UF diferente) / 0.0 (fora das UFs de interesse) |
-| **Valor** | 15% | 1.0 (na faixa) / decaimento proporcional à distância / 0.5 (valor desconhecido) |
-
-### NLP Pipeline
-
-```
-Texto → NormalizerPt → TokenizerPt → StopwordsPt → filtro min 3 chars → StemmerPt → dedup → sort
-```
-
-Exemplos: "consultoria" → `consult`, "tecnologia" → `tecnolog`, "licitações" → `licit`
+| **Textual** | 60% | Jaccard entre stems empresa (CNAEs + keywords) e stems objeto da licitação |
+| **Geográfico** | 25% | 1.0 (UF match) / 0.3 (sem preferência) / 0.0 (fora das UFs) |
+| **Valor** | 15% | 1.0 (na faixa) / decaimento proporcional / 0.5 (desconhecido) |
 
 ---
 
-## Banco de Dados
-
-### Models
+## Estrutura do Projeto
 
 ```
-Empresa (cnpj, razaoSocial, CNAEs, stems NLP, preferências)
-    │
-    ├── LicitacaoMatch (score composto + breakdown + palavrasMatch)
-    │       │
-    │       └── Licitacao (pncpId, objeto, orgão, modalidade, valor, UF, datas, stems)
-    │
-    └── Participacao (status, valorProposta, observações)
-            │
-            └── Licitacao
-```
-
----
-
-## Testando
-
-### Com Insomnia
-Importe o arquivo `API.json` no Insomnia e siga o workflow numerado na seção "4. Workflow Completo de Teste".
-
-### Com curl
-
-```bash
-# 1. Health check
-curl http://localhost:3000/health
-
-# 2. Cadastrar empresa
-curl -X POST http://localhost:3000/empresas/cnpj \
-  -H "Content-Type: application/json" \
-  -d '{"cnpj": "19131243000197"}'
-
-# 3. Configurar preferências
-curl -X PATCH http://localhost:3000/empresas/{id}/preferencias \
-  -H "Content-Type: application/json" \
-  -d '{"palavrasChave":["software","ERP"],"ufsInteresse":["SP","RJ"],"valorMinimo":50000,"valorMaximo":500000}'
-
-# 4. Importar licitações do PNCP
-curl -X POST http://localhost:3000/licitacoes/importar \
-  -H "Content-Type: application/json" \
-  -d '{"dataInicial":"20260213","dataFinal":"20260220","codigoModalidade":6,"paginas":2}'
-
-# 5. Ver matches da empresa
-curl "http://localhost:3000/empresas/{id}/matches?scoreMin=0.2&apenasAbertas=true"
-
-# 6. Listar licitações com filtros
-curl "http://localhost:3000/licitacoes?uf=SP&modalidade=Pregão&apenasAbertas=true&limit=10"
-
-# 7. Registrar participação
-curl -X POST http://localhost:3000/participacoes \
-  -H "Content-Type: application/json" \
-  -d '{"empresaId":"{id}","licitacaoId":"{id}","observacoes":"Analisando edital"}'
-
-# 8. Atualizar status
-curl -X PATCH http://localhost:3000/participacoes/{id} \
-  -H "Content-Type: application/json" \
-  -d '{"status":"PROPOSTA_ENVIADA","valorProposta":48000}'
-
-# 9. Listar participações
-curl "http://localhost:3000/participacoes?empresaId={id}&status=PROPOSTA_ENVIADA"
+licitaBack/
+├── prisma/
+│   └── schema.prisma                  # 4 models + enum
+├── prisma.config.ts                   # Config Prisma v7
+├── scripts/
+│   └── dev-setup.js                   # Setup automático
+├── src/
+│   ├── config/                        # load-env.ts + env.ts
+│   ├── lib/                           # prisma.ts (singleton)
+│   ├── clients/
+│   │   ├── brasilApiClient.ts         # Consulta CNPJ
+│   │   └── pncpClient.ts             # PNCP com paginação + retry
+│   ├── utils/
+│   │   ├── text.ts                    # NLP pipeline PT-BR
+│   │   └── score.ts                   # Score composto
+│   ├── repositories/                  # CRUD + filtros ricos
+│   ├── services/                      # Lógica de negócio
+│   ├── controllers/                   # Validação HTTP
+│   ├── routes/                        # 11 endpoints
+│   ├── middleware/                     # Error handler
+│   ├── app.ts                         # Express app + serve frontend
+│   └── server.ts                      # Entry point
+├── frontend/                          # React 19 + Vite 7
+│   ├── src/
+│   │   ├── components/                # Modal, TagInput, Toast, FieldHelp, etc.
+│   │   ├── pages/                     # Dashboard, Empresas, Licitações, Matches, Participações
+│   │   ├── hooks/                     # useToast
+│   │   ├── lib/                       # api.ts, constants.ts
+│   │   └── types.ts                   # Tipos alinhados com Prisma schema
+│   ├── package.json
+│   └── vite.config.ts                 # Proxy /api → localhost:3000
+├── docs/
+│   └── GUIA_DO_USUARIO.md            # Documentação para cliente não-técnico
+├── API.json                           # Coleção Insomnia
+├── .env.example
+├── package.json
+└── README.md
 ```
 
 ---
@@ -252,44 +228,28 @@ curl "http://localhost:3000/participacoes?empresaId={id}&status=PROPOSTA_ENVIADA
 | Variável | Obrigatória | Descrição |
 |---|---|---|
 | `DATABASE_URL` | Sim | PostgreSQL connection string |
-| `PORT` | Não (default 3000) | Porta do servidor |
-| `NODE_ENV` | Não (default development) | Ambiente |
-| `PNCP_BASE_URL` | Não | URL base da API PNCP |
-| `BRASILAPI_BASE_URL` | Não | URL base da BrasilAPI |
+| `PORT` | Não (3000) | Porta do servidor |
+| `NODE_ENV` | Não (development) | Ambiente |
+| `PNCP_BASE_URL` | Não | URL base PNCP |
+| `BRASILAPI_BASE_URL` | Não | URL base BrasilAPI |
 
 ---
 
 ## Roadmap Concluído
 
 ```
-Etapa 1 ✅  Fundação
-├── Setup projeto (TypeScript ESM, Prisma 7, Express 5)
-├── Schema completo (4 models)
-├── NLP: text.ts (stemming PT-BR)
-├── Score: score.ts (textual 60% + geográfico 25% + valor 15%)
-├── Middleware error handler
-├── Config (load-env, env tipado)
-├── API.json (Insomnia)
-└── dev-setup.js (auto generate + push)
+Backend
+├── Etapa 1 ✅  Fundação (setup, schema, NLP, score, config)
+├── Etapa 2 ✅  Módulo Empresas (BrasilAPI, CRUD, matches)
+├── Etapa 3 ✅  Módulo Licitações (PNCP, importação, filtros)
+└── Etapa 4 ✅  Módulo Participações (CRUD, status workflow)
 
-Etapa 2 ✅  Módulo Empresas
-├── brasilApiClient.ts (consulta CNPJ)
-├── empresaRepository.ts (CRUD)
-├── licitacaoMatchRepository.ts (CRUD matches)
-├── empresaService.ts (cadastro + preferências + recálculo)
-├── empresaController.ts (validação)
-└── empresaRoutes.ts (5 endpoints)
+Frontend
+├── Etapa F1 ✅  Setup + Layout + Dashboard
+├── Etapa F2 ✅  Módulo Empresas (CRUD, tags, modais)
+├── Etapa F3 ✅  Módulo Licitações (importar, filtros, detalhe)
+└── Etapa F4 ✅  Módulo Matches + Participações + Auto-explicativo
 
-Etapa 3 ✅  Módulo Licitações
-├── pncpClient.ts (integração PNCP com paginação + retry)
-├── licitacaoRepository.ts (CRUD + filtros ricos + paginação)
-├── licitacaoService.ts (importação + cálculo matches + listagem)
-├── licitacaoController.ts (validação)
-└── licitacaoRoutes.ts (3 endpoints)
-
-Etapa 4 ✅  Módulo Participações
-├── participacaoRepository.ts (CRUD + filtros)
-├── participacaoService.ts (registro + atualização status + validação)
-├── participacaoController.ts (validação)
-└── participacaoRoutes.ts (3 endpoints)
+Melhorias
+└── Importação Inteligente ✅  Score-First (calcula antes de salvar)
 ```

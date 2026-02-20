@@ -62,11 +62,24 @@ export interface PncpFiltros {
   apenasPropostasAbertas?: boolean;
 }
 
-// Modalidades PNCP: 1-Leilão Eletrônico, 2-Diálogo Competitivo, 3-Concurso,
-// 4-Concorrência Eletrônica, 5-Concorrência Presencial, 6-Pregão Eletrônico,
-// 7-Pregão Presencial, 8-Dispensa, 9-Inexigibilidade, 10-Manifestação,
-// 11-Pré-qualificação, 12-Credenciamento, 13-Leilão Presencial
-const TODAS_MODALIDADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+export interface PncpProgresso {
+  fase: "buscando";
+  modalidade: string;
+  pagina: number;
+  totalPaginas: number;
+  itensAcumulados: number;
+}
+
+export interface CancelSignal {
+  cancelled: boolean;
+}
+
+const MODALIDADES_NOMES: Record<number, string> = {
+  1: "Leilão Eletrônico", 2: "Diálogo Competitivo", 3: "Concurso",
+  4: "Concorrência Eletrônica", 5: "Concorrência Presencial", 6: "Pregão Eletrônico",
+  7: "Pregão Presencial", 8: "Dispensa", 9: "Inexigibilidade", 10: "Manifestação",
+  11: "Pré-qualificação", 12: "Credenciamento", 13: "Leilão Presencial",
+};
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
@@ -98,7 +111,10 @@ async function fetchComRetry(url: string, tentativa = 0): Promise<Response> {
 async function buscarPorModalidade(
   filtros: PncpFiltros,
   codigoModalidade: number,
-  maxPaginas: number
+  maxPaginas: number,
+  onProgress?: (p: PncpProgresso) => void,
+  signal?: CancelSignal,
+  acumuladoGlobal = 0,
 ): Promise<PncpContratacaoResponse[]> {
   const endpoint = filtros.apenasPropostasAbertas
     ? "contratacoes/proposta"
@@ -109,8 +125,11 @@ async function buscarPorModalidade(
   const items: PncpContratacaoResponse[] = [];
   let pagina = 1;
   let totalPaginas = 1;
+  const nomeModalidade = MODALIDADES_NOMES[codigoModalidade] || `Modalidade ${codigoModalidade}`;
 
   while (pagina <= Math.min(totalPaginas, maxPaginas)) {
+    if (signal?.cancelled) break;
+
     const params = new URLSearchParams({
       dataInicial: filtros.dataInicial,
       dataFinal: filtros.dataFinal,
@@ -122,7 +141,14 @@ async function buscarPorModalidade(
     if (filtros.uf) params.set("uf", filtros.uf);
 
     const url = `${baseUrl}?${params.toString()}`;
-    console.log(`[PNCP] Modalidade ${codigoModalidade}, página ${pagina}...`);
+
+    onProgress?.({
+      fase: "buscando",
+      modalidade: nomeModalidade,
+      pagina,
+      totalPaginas,
+      itensAcumulados: acumuladoGlobal + items.length,
+    });
 
     let response: Response;
     try {
@@ -146,7 +172,7 @@ async function buscarPorModalidade(
     totalPaginas = envelope.totalPaginas;
 
     console.log(
-      `[PNCP] Página ${pagina}/${totalPaginas}: ${envelope.data.length} itens (acumulado modalidade: ${items.length})`
+      `[PNCP] Página ${pagina}/${totalPaginas}: ${envelope.data.length} itens (acumulado: ${acumuladoGlobal + items.length})`
     );
 
     pagina++;
@@ -156,22 +182,24 @@ async function buscarPorModalidade(
 }
 
 export async function buscarContratacoes(
-  filtros: PncpFiltros
+  filtros: PncpFiltros,
+  onProgress?: (p: PncpProgresso) => void,
+  signal?: CancelSignal,
 ): Promise<PncpContratacaoResponse[]> {
   const maxPaginas = filtros.paginas ?? 999;
 
   if (filtros.codigoModalidade) {
-    return buscarPorModalidade(filtros, filtros.codigoModalidade, maxPaginas);
+    return buscarPorModalidade(filtros, filtros.codigoModalidade, maxPaginas, onProgress, signal);
   }
 
-  // Sem modalidade especificada: buscar as mais relevantes (6=Pregão Eletrônico, 4=Concorrência, 8=Dispensa)
   const modalidadesPrioritarias = [6, 4, 8];
   const allItems: PncpContratacaoResponse[] = [];
 
   for (const mod of modalidadesPrioritarias) {
-    const items = await buscarPorModalidade(filtros, mod, maxPaginas);
+    if (signal?.cancelled) break;
+    const items = await buscarPorModalidade(filtros, mod, maxPaginas, onProgress, signal, allItems.length);
     allItems.push(...items);
-    console.log(`[PNCP] Modalidade ${mod}: ${items.length} itens. Total acumulado: ${allItems.length}`);
+    console.log(`[PNCP] Modalidade ${mod}: ${items.length} itens. Total: ${allItems.length}`);
   }
 
   return allItems;

@@ -32,6 +32,10 @@ export async function update(id: string, data: Prisma.ParticipacaoUpdateInput) {
   });
 }
 
+export async function deleteById(id: string) {
+  return prisma.participacao.delete({ where: { id } });
+}
+
 export interface ParticipacaoFiltros {
   empresaId?: string;
   status?: string;

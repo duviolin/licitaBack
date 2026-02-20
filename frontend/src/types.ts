@@ -43,6 +43,8 @@ export interface Licitacao {
   matches?: LicitacaoMatch[];
 }
 
+export type MatchStatus = 'NOVO' | 'FAVORITO' | 'DESCARTADO';
+
 export interface LicitacaoMatch {
   id: string;
   empresaId: string;
@@ -52,6 +54,7 @@ export interface LicitacaoMatch {
   scoreGeografico: number;
   scoreValor: number;
   palavrasMatch: string[];
+  status: MatchStatus;
   createdAt: string;
   empresa?: Empresa;
   licitacao?: Licitacao;

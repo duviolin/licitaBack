@@ -137,6 +137,43 @@ export async function findWithFilters(filtros: LicitacaoFiltros) {
   return { data, total, page, limit: take, totalPages: Math.ceil(total / take) };
 }
 
+export async function deleteOrfas() {
+  return prisma.licitacao.deleteMany({
+    where: {
+      matches: { none: {} },
+      participacoes: { none: {} },
+    },
+  });
+}
+
+export async function deleteEncerradasAntigas(diasAtras: number = 30) {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - diasAtras);
+  return prisma.licitacao.deleteMany({
+    where: {
+      dataEncerramento: { lt: limite },
+      participacoes: { none: {} },
+    },
+  });
+}
+
+export async function countEncerradas() {
+  return prisma.licitacao.count({
+    where: {
+      dataEncerramento: { lt: new Date() },
+    },
+  });
+}
+
+export async function countOrfas() {
+  return prisma.licitacao.count({
+    where: {
+      matches: { none: {} },
+      participacoes: { none: {} },
+    },
+  });
+}
+
 function parseYYYYMMDD(s: string): Date | null {
   if (!/^\d{8}$/.test(s)) return null;
   const y = parseInt(s.slice(0, 4));

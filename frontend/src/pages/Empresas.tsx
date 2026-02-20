@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Plus, Search, MapPin, FileText, RefreshCw,
-  Settings, Eye, ChevronRight, Loader2,
+  Building2, Plus, Search, MapPin, FileText,
+  ChevronRight, Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCnpj, formatDate } from '../lib/constants';
@@ -10,7 +10,6 @@ import { PageHeader } from '../components/PageHeader';
 import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import { CadastrarEmpresaModal } from '../components/CadastrarEmpresaModal';
-import { EditarPreferenciasModal } from '../components/EditarPreferenciasModal';
 import type { Empresa } from '../types';
 
 export function Empresas() {
@@ -21,7 +20,6 @@ export function Empresas() {
   const [search, setSearch] = useState('');
   const [filterUf, setFilterUf] = useState('');
   const [showCadastrar, setShowCadastrar] = useState(false);
-  const [editando, setEditando] = useState<Empresa | null>(null);
 
   useEffect(() => {
     loadEmpresas();
@@ -57,16 +55,6 @@ export function Empresas() {
       return matchSearch && matchUf;
     });
   }, [empresas, search, filterUf]);
-
-  async function handleRecalcular(empresa: Empresa) {
-    try {
-      addToast('info', `Recalculando matches para ${empresa.nomeFantasia || empresa.razaoSocial}...`);
-      await api.patch(`/empresas/${empresa.id}/preferencias`, {});
-      addToast('success', 'Matches recalculados com sucesso!');
-    } catch (err) {
-      addToast('error', err instanceof Error ? err.message : 'Erro ao recalcular');
-    }
-  }
 
   return (
     <div>
@@ -138,9 +126,7 @@ export function Empresas() {
             <EmpresaCard
               key={empresa.id}
               empresa={empresa}
-              onEdit={() => setEditando(empresa)}
-              onView={() => navigate(`/empresas/${empresa.id}`)}
-              onRecalcular={() => handleRecalcular(empresa)}
+              onClick={() => navigate(`/empresas/${empresa.id}`)}
             />
           ))}
         </div>
@@ -157,34 +143,16 @@ export function Empresas() {
         }}
         onError={(msg) => addToast('error', msg)}
       />
-
-      {editando && (
-        <EditarPreferenciasModal
-          open={!!editando}
-          empresa={editando}
-          onClose={() => setEditando(null)}
-          onSuccess={(atualizada) => {
-            setEmpresas((prev) => prev.map((e) => (e.id === atualizada.id ? atualizada : e)));
-            setEditando(null);
-            addToast('success', 'Preferências atualizadas com sucesso!');
-          }}
-          onError={(msg) => addToast('error', msg)}
-        />
-      )}
     </div>
   );
 }
 
-interface EmpresaCardProps {
-  empresa: Empresa;
-  onEdit: () => void;
-  onView: () => void;
-  onRecalcular: () => void;
-}
-
-function EmpresaCard({ empresa, onEdit, onView, onRecalcular }: EmpresaCardProps) {
+function EmpresaCard({ empresa, onClick }: { empresa: Empresa; onClick: () => void }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div
+      onClick={onClick}
+      className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
+    >
       <div className="flex items-start gap-4">
         <div className="p-2.5 rounded-lg bg-blue-50">
           <Building2 size={20} className="text-blue-600" />
@@ -241,30 +209,7 @@ function EmpresaCard({ empresa, onEdit, onView, onRecalcular }: EmpresaCardProps
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={onRecalcular}
-            title="Recalcular matches"
-            className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-          >
-            <RefreshCw size={16} />
-          </button>
-          <button
-            onClick={onEdit}
-            title="Editar preferências"
-            className="p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
-          >
-            <Settings size={16} />
-          </button>
-          <button
-            onClick={onView}
-            title="Ver detalhes"
-            className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-          >
-            <Eye size={16} />
-          </button>
-          <ChevronRight size={16} className="text-slate-300 ml-1" />
-        </div>
+        <ChevronRight size={18} className="text-slate-300 mt-2" />
       </div>
     </div>
   );

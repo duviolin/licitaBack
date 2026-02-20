@@ -7,6 +7,12 @@ datasource db {
   provider = "postgresql"
 }
 
+enum MatchStatus {
+  NOVO
+  FAVORITO
+  DESCARTADO
+}
+
 enum ParticipacaoStatus {
   ANALISANDO
   PROPOSTA_ENVIADA
@@ -78,7 +84,7 @@ model Licitacao {
 }
 
 model LicitacaoMatch {
-  id              String   @id @default(uuid())
+  id              String      @id @default(uuid())
   empresaId       String
   licitacaoId     String
 
@@ -87,6 +93,7 @@ model LicitacaoMatch {
   scoreGeografico Decimal
   scoreValor      Decimal
   palavrasMatch   String[]
+  status          MatchStatus @default(NOVO)
 
   createdAt       DateTime @default(now())
 
@@ -97,6 +104,7 @@ model LicitacaoMatch {
   @@index([empresaId])
   @@index([licitacaoId])
   @@index([score])
+  @@index([status])
 }
 
 model Participacao {

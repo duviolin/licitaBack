@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Modal } from './Modal';
 import { TagInput } from './TagInput';
+import { FieldHelp } from './FieldHelp';
 import { api } from '../lib/api';
 import { UFS, MODALIDADES, PALAVRAS_CHAVE_SUGESTOES, formatCnpj } from '../lib/constants';
 import type { Empresa } from '../types';
@@ -44,40 +45,56 @@ export function EditarPreferenciasModal({ open, empresa, onClose, onSuccess, onE
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Editar Preferências" size="lg">
+    <Modal open={open} onClose={onClose} title="Editar Preferências de Busca" size="lg">
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="bg-slate-50 rounded-lg p-3 flex items-center gap-3">
-          <div>
-            <p className="text-sm font-medium text-slate-900">
-              {empresa.nomeFantasia || empresa.razaoSocial}
-            </p>
-            <p className="text-xs text-slate-500 font-mono">{formatCnpj(empresa.cnpj)}</p>
-          </div>
+        <div className="bg-slate-50 rounded-lg p-3">
+          <p className="text-sm font-medium text-slate-900">
+            {empresa.nomeFantasia || empresa.razaoSocial}
+          </p>
+          <p className="text-xs text-slate-500 font-mono">{formatCnpj(empresa.cnpj)}</p>
         </div>
 
-        <TagInput
-          label="Palavras-chave"
-          tags={palavrasChave}
-          onChange={setPalavrasChave}
-          suggestions={PALAVRAS_CHAVE_SUGESTOES}
-          placeholder="Ex: tecnologia, software, consultoria..."
-        />
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+          <p className="font-medium mb-1">Para que servem as preferências?</p>
+          <p>
+            Elas definem <strong>quais licitações são relevantes</strong> para esta empresa. O sistema
+            usa essas informações para calcular um <strong>score de compatibilidade</strong> (0-100%)
+            com cada licitação. Quanto mais detalhadas, melhores as recomendações.
+          </p>
+        </div>
 
-        <TagInput
-          label="UFs de interesse"
-          tags={ufsInteresse}
-          onChange={setUfsInteresse}
-          suggestions={UFS}
-          placeholder="Ex: SP, RJ, MG..."
-        />
+        <div>
+          <TagInput
+            label="Palavras-chave"
+            tags={palavrasChave}
+            onChange={setPalavrasChave}
+            suggestions={PALAVRAS_CHAVE_SUGESTOES}
+            placeholder="Digite e pressione Enter..."
+          />
+          <FieldHelp text="Termos que descrevem o que a empresa fornece. Impactam 60% do score. Ex: 'software', 'manutenção predial', 'equipamentos hospitalares'. Digite e pressione Enter para adicionar, ou escolha das sugestões." />
+        </div>
 
-        <TagInput
-          label="Modalidades de interesse"
-          tags={modalidades}
-          onChange={setModalidades}
-          suggestions={MODALIDADES}
-          placeholder="Ex: Pregão Eletrônico..."
-        />
+        <div>
+          <TagInput
+            label="UFs de interesse"
+            tags={ufsInteresse}
+            onChange={setUfsInteresse}
+            suggestions={UFS}
+            placeholder="Digite a sigla: SP, RJ..."
+          />
+          <FieldHelp text="Estados onde a empresa deseja participar de licitações. Use a sigla de 2 letras (ex: SP, RJ, MG). Impactam 25% do score. Se vazio, todas as UFs são consideradas." />
+        </div>
+
+        <div>
+          <TagInput
+            label="Modalidades de interesse"
+            tags={modalidades}
+            onChange={setModalidades}
+            suggestions={MODALIDADES}
+            placeholder="Escolha das sugestões..."
+          />
+          <FieldHelp text="Tipos de processo licitatório que a empresa participa. Ex: 'Pregão Eletrônico' (mais comum), 'Concorrência', 'Dispensa'. Se vazio, todas as modalidades são consideradas." />
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -93,6 +110,7 @@ export function EditarPreferenciasModal({ open, empresa, onClose, onSuccess, onE
               step="1000"
               className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
+            <FieldHelp text="Valor estimado mínimo da licitação em reais. Licitações abaixo deste valor recebem score menor. Deixe 0 para não limitar." />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -107,7 +125,13 @@ export function EditarPreferenciasModal({ open, empresa, onClose, onSuccess, onE
               step="1000"
               className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
+            <FieldHelp text="Valor máximo que a empresa costuma operar. Licitações acima deste valor recebem score menor. Deixe vazio para sem limite." />
           </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+          <strong>Composição do score:</strong> Textual (palavras-chave + CNAE) = 60% | Geográfico (UFs) = 25% | Valor (faixa) = 15%.
+          Ao salvar, todos os matches serão recalculados automaticamente.
         </div>
 
         <div className="flex gap-3 pt-2">
@@ -127,19 +151,13 @@ export function EditarPreferenciasModal({ open, empresa, onClose, onSuccess, onE
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                Salvando...
+                Salvando e recalculando...
               </>
             ) : (
               'Salvar Preferências'
             )}
           </button>
         </div>
-
-        {loading && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-            Salvando e recalculando matches... Isso pode levar alguns segundos.
-          </div>
-        )}
       </form>
     </Modal>
   );

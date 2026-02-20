@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { Prisma } from "../generated/prisma/client.js";
+import { Prisma, MatchStatus } from "../generated/prisma/client.js";
 
 export async function createMany(
   data: Prisma.LicitacaoMatchCreateManyInput[]
@@ -17,15 +17,23 @@ export async function findByEmpresaId(
   options: {
     scoreMin?: number;
     apenasAbertas?: boolean;
+    status?: MatchStatus;
+    excluirDescartados?: boolean;
     limit?: number;
   } = {}
 ) {
-  const { scoreMin = 0, apenasAbertas = false, limit = 50 } = options;
+  const { scoreMin = 0, apenasAbertas = false, status, excluirDescartados = true, limit = 50 } = options;
 
   const where: Prisma.LicitacaoMatchWhereInput = {
     empresaId,
     score: { gte: scoreMin },
   };
+
+  if (status) {
+    where.status = status;
+  } else if (excluirDescartados) {
+    where.status = { not: MatchStatus.DESCARTADO };
+  }
 
   if (apenasAbertas) {
     where.licitacao = {
@@ -41,7 +49,10 @@ export async function findByEmpresaId(
     include: {
       licitacao: true,
     },
-    orderBy: { score: "desc" },
+    orderBy: [
+      { status: "asc" },
+      { score: "desc" },
+    ],
     take: limit,
   });
 }
@@ -68,4 +79,29 @@ export async function upsert(
       ...data,
     },
   });
+}
+
+export async function updateStatus(matchId: string, status: MatchStatus) {
+  return prisma.licitacaoMatch.update({
+    where: { id: matchId },
+    data: { status },
+  });
+}
+
+export async function deleteDescartados() {
+  return prisma.licitacaoMatch.deleteMany({
+    where: { status: MatchStatus.DESCARTADO },
+  });
+}
+
+export async function countByStatus() {
+  const results = await prisma.licitacaoMatch.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  const counts: Record<string, number> = { NOVO: 0, FAVORITO: 0, DESCARTADO: 0 };
+  for (const r of results) {
+    counts[r.status] = r._count._all;
+  }
+  return counts;
 }

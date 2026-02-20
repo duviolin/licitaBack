@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   FileText, Download, Search, Filter, ChevronLeft, ChevronRight,
-  MapPin, Banknote, Calendar, Eye, Loader2, X,
+  MapPin, Banknote, Calendar, Eye, Loader2, X, Info,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { UFS, formatCurrency, formatDate } from '../lib/constants';
 import { PageHeader } from '../components/PageHeader';
+import { FieldHelp } from '../components/FieldHelp';
 import { ImportarLicitacoesModal } from '../components/ImportarLicitacoesModal';
 import { LicitacaoDetalheModal } from '../components/LicitacaoDetalheModal';
 import { ToastContainer } from '../components/Toast';
@@ -110,6 +111,15 @@ export function Licitacoes() {
         }
       />
 
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm text-blue-700 flex items-start gap-2">
+        <Info size={16} className="shrink-0 mt-0.5" />
+        <p>
+          Licitações são oportunidades de contratação do governo publicadas no <strong>PNCP</strong>.
+          Use o botão "Importar do PNCP" para buscar novas. Use os filtros para encontrar as mais relevantes.
+          Clique em qualquer licitação para ver detalhes e as empresas com match.
+        </p>
+      </div>
+
       {/* Search + Filter Toggle */}
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1 max-w-lg">
@@ -185,7 +195,7 @@ export function Licitacoes() {
               </select>
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 space-y-2">
             <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
               <input
                 type="checkbox"
@@ -195,6 +205,7 @@ export function Licitacoes() {
               />
               Apenas licitações abertas (não encerradas)
             </label>
+            <FieldHelp text="Os filtros são aplicados no servidor e afetam a paginação. A busca por texto acima filtra localmente na página atual." />
           </div>
         </div>
       )}

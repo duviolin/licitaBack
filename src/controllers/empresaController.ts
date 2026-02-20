@@ -107,10 +107,14 @@ export async function obterMatches(
     const scoreMin = req.query.scoreMin ? Number(req.query.scoreMin) : 0;
     const apenasAbertas = req.query.apenasAbertas === "true";
     const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const status = req.query.status as "NOVO" | "FAVORITO" | "DESCARTADO" | undefined;
+    const excluirDescartados = req.query.excluirDescartados !== "false";
 
     const matches = await empresaService.obterMatches(id as string, {
       scoreMin,
       apenasAbertas,
+      status,
+      excluirDescartados,
       limit,
     });
 

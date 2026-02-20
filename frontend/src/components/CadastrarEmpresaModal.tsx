@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import { Modal } from './Modal';
+import { FieldHelp } from './FieldHelp';
 import { api } from '../lib/api';
 import type { Empresa } from '../types';
 
@@ -48,12 +49,17 @@ export function CadastrarEmpresaModal({ open, onClose, onSuccess, onError }: Pro
   return (
     <Modal open={open} onClose={onClose} title="Cadastrar Empresa por CNPJ" size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <p className="text-sm text-slate-500">
-          Digite o CNPJ e buscaremos automaticamente os dados da empresa na Receita Federal via BrasilAPI.
-        </p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700 space-y-1">
+          <p className="font-medium">Como funciona?</p>
+          <p>
+            Ao digitar o CNPJ, o sistema consulta a <strong>Receita Federal</strong> (via BrasilAPI) e preenche
+            automaticamente: razão social, nome fantasia, CNAE, endereço e situação cadastral.
+            Após o cadastro, o sistema já calcula os primeiros matches com as licitações importadas.
+          </p>
+        </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">CNPJ</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">CNPJ da empresa</label>
           <div className="relative">
             <input
               type="text"
@@ -66,9 +72,7 @@ export function CadastrarEmpresaModal({ open, onClose, onSuccess, onError }: Pro
             />
             <Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            {cnpj.replace(/\D/g, '').length}/14 dígitos
-          </p>
+          <FieldHelp text={`Digite apenas os 14 números ou no formato XX.XXX.XXX/XXXX-XX. A formatação é automática. (${cnpj.replace(/\D/g, '').length}/14 dígitos)`} />
         </div>
 
         <div className="flex gap-3 pt-2">
@@ -88,7 +92,7 @@ export function CadastrarEmpresaModal({ open, onClose, onSuccess, onError }: Pro
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                Buscando...
+                Buscando na Receita...
               </>
             ) : (
               'Cadastrar'
@@ -98,7 +102,7 @@ export function CadastrarEmpresaModal({ open, onClose, onSuccess, onError }: Pro
 
         {loading && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-            Consultando BrasilAPI e calculando matches... Isso pode levar alguns segundos.
+            Consultando dados da empresa e calculando relevância com licitações existentes... Pode levar até 15 segundos.
           </div>
         )}
       </form>

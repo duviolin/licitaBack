@@ -56,6 +56,12 @@ export async function atualizar(
   return participacaoRepo.update(id, updateData);
 }
 
+export async function remover(id: string) {
+  const participacao = await participacaoRepo.findById(id);
+  if (!participacao) throw new Error("Participação não encontrada");
+  await participacaoRepo.deleteById(id);
+}
+
 export async function listar(filtros: participacaoRepo.ParticipacaoFiltros) {
   return participacaoRepo.findWithFilters(filtros);
 }

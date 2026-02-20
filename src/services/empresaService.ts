@@ -99,7 +99,13 @@ export async function obterEmpresa(id: string) {
 
 export async function obterMatches(
   empresaId: string,
-  options: { scoreMin?: number; apenasAbertas?: boolean; limit?: number }
+  options: {
+    scoreMin?: number;
+    apenasAbertas?: boolean;
+    status?: "NOVO" | "FAVORITO" | "DESCARTADO";
+    excluirDescartados?: boolean;
+    limit?: number;
+  }
 ) {
   const empresa = await empresaRepo.findById(empresaId);
   if (!empresa) {

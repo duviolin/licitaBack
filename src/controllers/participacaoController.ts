@@ -61,6 +61,19 @@ export async function atualizar(
   }
 }
 
+export async function remover(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    await participacaoService.remover(req.params.id as string);
+    res.json({ removida: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listar(
   req: Request,
   res: Response,
