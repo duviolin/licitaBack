@@ -62,24 +62,14 @@ export interface LicitacaoMatch {
 
 export type ParticipacaoStatus =
   | 'ANALISANDO'
-  | 'PROPOSTA_ENVIADA'
+  | 'PENDENTE_DOC'
+  | 'APTA'
+  | 'ENVIADA'
   | 'EM_DISPUTA'
-  | 'GANHO'
-  | 'PERDIDO';
+  | 'GANHA'
+  | 'PERDIDA';
 
-export interface Participacao {
-  id: string;
-  empresaId: string;
-  licitacaoId: string;
-  dataParticipacao: string;
-  valorProposta: number | null;
-  status: ParticipacaoStatus;
-  observacoes: string;
-  createdAt: string;
-  updatedAt: string;
-  empresa?: Empresa;
-  licitacao?: Licitacao;
-}
+export type ConformidadeStatus = 'OK' | 'AUSENTE' | 'VENCIDO' | 'INCOMPATIVEL';
 
 export type DocumentoTipo =
   | 'CND_FEDERAL' | 'CND_ESTADUAL' | 'CND_MUNICIPAL' | 'CND_TRABALHISTA'
@@ -103,18 +93,9 @@ export interface EmpresaDocumento {
   updatedAt: string;
 }
 
-export type LicitacaoExecStatus =
-  | 'ANALISE'
-  | 'DOCUMENTOS_OK'
-  | 'PENDENTE_DOC'
-  | 'PRONTO_ENVIO'
-  | 'ENVIADO';
-
-export type ConformidadeStatus = 'OK' | 'AUSENTE' | 'VENCIDO' | 'INCOMPATIVEL';
-
 export interface DocumentoExigido {
   id: string;
-  licitacaoExecId: string;
+  participacaoId: string;
   tipo: string;
   nome: string;
   secaoEdital: string;
@@ -127,7 +108,7 @@ export interface DocumentoExigido {
 
 export interface ConformidadeDocumento {
   id: string;
-  licitacaoExecId: string;
+  participacaoId: string;
   empresaId: string;
   documentoExigidoId: string;
   empresaDocumentoId: string | null;
@@ -135,11 +116,12 @@ export interface ConformidadeDocumento {
   observacao: string;
   createdAt: string;
   documentoExigido?: DocumentoExigido;
+  empresaDocumento?: EmpresaDocumento;
 }
 
 export interface PrazosEdital {
   id: string;
-  licitacaoExecId: string;
+  participacaoId: string;
   dataAbertura: string | null;
   dataSessao: string | null;
   prazoImpugnacao: string | null;
@@ -165,31 +147,25 @@ export interface Checklist {
   aptoParaParticipar: boolean;
 }
 
-export interface ParticipacaoPreparada {
+export interface Participacao {
   id: string;
-  licitacaoExecId: string;
   empresaId: string;
-  documentosOk: boolean;
-  checklist: Checklist;
-  propostaBase: number | null;
-  prontoParaEnvio: boolean;
-  createdAt: string;
-}
-
-export interface LicitacaoExec {
-  id: string;
   licitacaoId: string;
-  empresaId: string;
+  dataParticipacao: string;
+  valorProposta: number | null;
+  status: ParticipacaoStatus;
+  observacoes: string;
   editalUrl: string;
   editalTexto: string | null;
   portalLink: string;
-  status: LicitacaoExecStatus;
+  documentosOk: boolean;
+  checklist: Checklist | null;
+  percentualConformidade: number;
   createdAt: string;
   updatedAt: string;
-  licitacao?: Licitacao;
   empresa?: Empresa;
+  licitacao?: Licitacao;
   documentosExigidos?: DocumentoExigido[];
   conformidades?: ConformidadeDocumento[];
   prazos?: PrazosEdital;
-  participacaoPreparada?: ParticipacaoPreparada;
 }

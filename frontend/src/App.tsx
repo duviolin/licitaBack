@@ -5,8 +5,7 @@ import { Empresas } from './pages/Empresas';
 import { EmpresaDetalhe } from './pages/EmpresaDetalhe';
 import { Matches } from './pages/Matches';
 import { Participacoes } from './pages/Participacoes';
-import { LicitacaoExec } from './pages/LicitacaoExec';
-import { LicitacaoExecDetalhe } from './pages/LicitacaoExecDetalhe';
+import { ParticipacaoDetalhe } from './pages/ParticipacaoDetalhe';
 
 export default function App() {
   return (
@@ -18,8 +17,7 @@ export default function App() {
           <Route path="/empresas/:id" element={<EmpresaDetalhe />} />
           <Route path="/matches" element={<Matches />} />
           <Route path="/participacoes" element={<Participacoes />} />
-          <Route path="/licitacao-exec" element={<LicitacaoExec />} />
-          <Route path="/licitacao-exec/:id" element={<LicitacaoExecDetalhe />} />
+          <Route path="/participacoes/:id" element={<ParticipacaoDetalhe />} />
         </Route>
       </Routes>
     </BrowserRouter>

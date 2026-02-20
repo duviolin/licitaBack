@@ -12,15 +12,15 @@ export async function createMany(
   return results;
 }
 
-export async function findByLicitacaoExecId(licitacaoExecId: string) {
+export async function findByParticipacaoId(participacaoId: string) {
   return prisma.documentoExigido.findMany({
-    where: { licitacaoExecId },
+    where: { participacaoId },
     orderBy: { tipo: "asc" },
   });
 }
 
-export async function deleteByLicitacaoExecId(licitacaoExecId: string) {
+export async function deleteByParticipacaoId(participacaoId: string) {
   return prisma.documentoExigido.deleteMany({
-    where: { licitacaoExecId },
+    where: { participacaoId },
   });
 }

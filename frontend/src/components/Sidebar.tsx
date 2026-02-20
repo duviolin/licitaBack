@@ -4,7 +4,6 @@ import {
   Building2,
   Handshake,
   Star,
-  FileSearch,
 } from 'lucide-react';
 
 const links = [
@@ -12,7 +11,6 @@ const links = [
   { to: '/empresas', label: 'Empresas', icon: Building2 },
   { to: '/matches', label: 'Matches', icon: Star },
   { to: '/participacoes', label: 'Participações', icon: Handshake },
-  { to: '/licitacao-exec', label: 'Disputas', icon: FileSearch },
 ];
 
 export function Sidebar() {
@@ -44,7 +42,7 @@ export function Sidebar() {
       </nav>
 
       <div className="px-5 py-4 border-t border-slate-700 text-xs text-slate-500">
-        v1.0.0
+        v2.0.0
       </div>
     </aside>
   );

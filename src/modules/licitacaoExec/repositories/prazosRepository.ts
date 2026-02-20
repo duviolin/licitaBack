@@ -2,18 +2,18 @@ import prisma from "../../../lib/prisma.js";
 import { Prisma } from "../../../generated/prisma/client.js";
 
 export async function upsert(
-  licitacaoExecId: string,
-  data: Omit<Prisma.PrazosEditalUncheckedCreateInput, "licitacaoExecId">
+  participacaoId: string,
+  data: Omit<Prisma.PrazosEditalUncheckedCreateInput, "participacaoId">
 ) {
   return prisma.prazosEdital.upsert({
-    where: { licitacaoExecId },
-    create: { licitacaoExecId, ...data },
+    where: { participacaoId },
+    create: { participacaoId, ...data },
     update: data,
   });
 }
 
-export async function findByLicitacaoExecId(licitacaoExecId: string) {
+export async function findByParticipacaoId(participacaoId: string) {
   return prisma.prazosEdital.findUnique({
-    where: { licitacaoExecId },
+    where: { participacaoId },
   });
 }

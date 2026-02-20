@@ -5,7 +5,6 @@ import { existsSync } from "fs";
 import empresaRoutes from "./routes/empresaRoutes.js";
 import licitacaoRoutes from "./routes/licitacaoRoutes.js";
 import participacaoRoutes from "./routes/participacaoRoutes.js";
-import licitacaoExecRoutes from "./modules/licitacaoExec/routes/index.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,7 +21,6 @@ app.get("/health", (_req, res) => {
 app.use("/empresas", empresaRoutes);
 app.use("/licitacoes", licitacaoRoutes);
 app.use("/participacoes", participacaoRoutes);
-app.use("/licitacao-exec", licitacaoExecRoutes);
 
 const frontendDist = join(__dirname, "..", "frontend", "dist");
 if (existsSync(frontendDist)) {

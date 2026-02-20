@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  Handshake, Plus, Loader2, X, Info, Trash2,
+  Handshake, Plus, Loader2, X, Info, CheckCircle2, AlertCircle,
+  Clock, FileText, ChevronRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/constants';
@@ -12,22 +13,24 @@ import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import type { Empresa, Licitacao, Participacao, ParticipacaoStatus } from '../types';
 
-const STATUS_OPTIONS: { value: ParticipacaoStatus; label: string; color: string; desc: string }[] = [
-  { value: 'ANALISANDO', label: 'Analisando', color: 'bg-blue-100 text-blue-700', desc: 'Avaliando se vale participar' },
-  { value: 'PROPOSTA_ENVIADA', label: 'Proposta Enviada', color: 'bg-yellow-100 text-yellow-700', desc: 'Proposta foi submetida' },
-  { value: 'EM_DISPUTA', label: 'Em Disputa', color: 'bg-indigo-100 text-indigo-700', desc: 'Participando do certame' },
-  { value: 'GANHO', label: 'Ganho', color: 'bg-green-100 text-green-700', desc: 'Licitação vencida!' },
-  { value: 'PERDIDO', label: 'Perdido', color: 'bg-red-100 text-red-700', desc: 'Não venceu o certame' },
+const STATUS_OPTIONS: { value: ParticipacaoStatus; label: string; color: string; icon: typeof CheckCircle2; desc: string }[] = [
+  { value: 'ANALISANDO', label: 'Analisando', color: 'bg-blue-100 text-blue-700', icon: Clock, desc: 'Baixando edital e analisando...' },
+  { value: 'PENDENTE_DOC', label: 'Pendente Doc', color: 'bg-amber-100 text-amber-700', icon: AlertCircle, desc: 'Faltam documentos de habilitação' },
+  { value: 'APTA', label: 'Apta', color: 'bg-green-100 text-green-700', icon: CheckCircle2, desc: 'Todos os documentos OK' },
+  { value: 'ENVIADA', label: 'Enviada', color: 'bg-indigo-100 text-indigo-700', icon: FileText, desc: 'Proposta submetida ao portal' },
+  { value: 'EM_DISPUTA', label: 'Em Disputa', color: 'bg-purple-100 text-purple-700', icon: Handshake, desc: 'Participando do certame' },
+  { value: 'GANHA', label: 'Ganha', color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2, desc: 'Licitação vencida!' },
+  { value: 'PERDIDA', label: 'Perdida', color: 'bg-red-100 text-red-700', icon: X, desc: 'Não venceu o certame' },
 ];
 
 export function Participacoes() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { toasts, addToast, removeToast } = useToast();
   const [participacoes, setParticipacoes] = useState<Participacao[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCriar, setShowCriar] = useState(false);
-  const [editando, setEditando] = useState<Participacao | null>(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterEmpresa, setFilterEmpresa] = useState('');
 
@@ -70,13 +73,21 @@ export function Participacoes() {
 
   const activeFilterCount = [filterStatus, filterEmpresa].filter(Boolean).length;
 
+  const stats = useMemo(() => ({
+    total: participacoes.length,
+    analisando: participacoes.filter((p) => p.status === 'ANALISANDO').length,
+    pendente: participacoes.filter((p) => p.status === 'PENDENTE_DOC').length,
+    apta: participacoes.filter((p) => p.status === 'APTA').length,
+    ganhas: participacoes.filter((p) => p.status === 'GANHA').length,
+  }), [participacoes]);
+
   return (
     <div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <PageHeader
         title="Participações"
-        description={`${participacoes.length} participação${participacoes.length !== 1 ? 'ões' : ''} registrada${participacoes.length !== 1 ? 's' : ''}`}
+        description={`${participacoes.length} participação${participacoes.length !== 1 ? 'ões' : ''}`}
         actions={
           <button
             onClick={() => setShowCriar(true)}
@@ -88,17 +99,28 @@ export function Participacoes() {
         }
       />
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm text-blue-700 flex items-start gap-2">
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-6 text-sm text-purple-700 flex items-start gap-2">
         <Info size={16} className="shrink-0 mt-0.5" />
         <div>
-          <p className="font-medium">O que são participações?</p>
+          <p className="font-medium">Fluxo unificado</p>
           <p>
-            Uma participação registra que sua <strong>empresa decidiu concorrer</strong> em uma licitação.
-            Você pode acompanhar o status (analisando, proposta enviada, em disputa, ganho ou perdido),
-            anotar o valor da proposta e adicionar observações. Use para controlar todo o funil de licitações.
+            Ao registrar participação, o sistema <strong>baixa o edital automaticamente</strong>, extrai
+            os requisitos de habilitação, e verifica se a empresa tem todos os documentos.
+            O status evolui: Analisando → Pendente Doc / Apta → Enviada → Em Disputa → Ganha/Perdida.
           </p>
         </div>
       </div>
+
+      {/* Stats */}
+      {stats.total > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <MiniStat label="Total" value={stats.total} color="text-slate-700" />
+          <MiniStat label="Analisando" value={stats.analisando} color="text-blue-600" />
+          <MiniStat label="Pendente" value={stats.pendente} color="text-amber-600" />
+          <MiniStat label="Aptas" value={stats.apta} color="text-green-600" />
+          <MiniStat label="Ganhas" value={stats.ganhas} color="text-emerald-600" />
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4">
@@ -161,7 +183,7 @@ export function Participacoes() {
               key={p.id}
               participacao={p}
               empresas={empresas}
-              onEdit={() => setEditando(p)}
+              onClick={() => navigate(`/participacoes/${p.id}`)}
             />
           ))}
         </div>
@@ -178,27 +200,8 @@ export function Participacoes() {
           onSuccess={(nova) => {
             setParticipacoes((prev) => [nova, ...prev]);
             setShowCriar(false);
-            addToast('success', 'Participação registrada com sucesso!');
-          }}
-          onError={(msg) => addToast('error', msg)}
-        />
-      )}
-
-      {/* Modal Editar */}
-      {editando && (
-        <EditarParticipacaoModal
-          open={!!editando}
-          participacao={editando}
-          onClose={() => setEditando(null)}
-          onSuccess={(atualizada) => {
-            setParticipacoes((prev) => prev.map((p) => (p.id === atualizada.id ? atualizada : p)));
-            setEditando(null);
-            addToast('success', 'Participação atualizada!');
-          }}
-          onRemove={(id) => {
-            setParticipacoes((prev) => prev.filter((p) => p.id !== id));
-            setEditando(null);
-            addToast('success', 'Participação removida.');
+            addToast('success', 'Participação registrada! Análise do edital em andamento...');
+            navigate(`/participacoes/${nova.id}`);
           }}
           onError={(msg) => addToast('error', msg)}
         />
@@ -207,46 +210,74 @@ export function Participacoes() {
   );
 }
 
+function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-3 text-center shadow-sm">
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  );
+}
+
 /* ---- Card ---- */
-function ParticipacaoCard({ participacao: p, empresas, onEdit }: {
+function ParticipacaoCard({ participacao: p, empresas, onClick }: {
   participacao: Participacao;
   empresas: Empresa[];
-  onEdit: () => void;
+  onClick: () => void;
 }) {
   const empresa = empresas.find((e) => e.id === p.empresaId);
   const statusOpt = STATUS_OPTIONS.find((s) => s.value === p.status);
+  const Icon = statusOpt?.icon ?? Clock;
 
   return (
     <div
-      onClick={onEdit}
+      onClick={onClick}
       className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
     >
       <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-purple-50 shrink-0">
-          <Handshake size={18} className="text-purple-600" />
+        <div className={`p-2 rounded-lg shrink-0 ${
+          p.status === 'APTA' || p.status === 'GANHA' ? 'bg-green-50' :
+          p.status === 'PENDENTE_DOC' ? 'bg-amber-50' :
+          p.status === 'PERDIDA' ? 'bg-red-50' : 'bg-purple-50'
+        }`}>
+          <Icon size={18} className={
+            p.status === 'APTA' || p.status === 'GANHA' ? 'text-green-600' :
+            p.status === 'PENDENTE_DOC' ? 'text-amber-600' :
+            p.status === 'PERDIDA' ? 'text-red-500' : 'text-purple-600'
+          } />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className={`text-xs font-bold px-2 py-0.5 rounded ${statusOpt?.color ?? 'bg-slate-100 text-slate-500'}`}>
               {statusOpt?.label ?? p.status}
             </span>
-            <span className="text-xs text-slate-400">{statusOpt?.desc}</span>
+            {p.percentualConformidade > 0 && (
+              <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                p.percentualConformidade >= 100 ? 'bg-green-100 text-green-700' :
+                p.percentualConformidade >= 50 ? 'bg-amber-100 text-amber-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {p.percentualConformidade}% docs
+              </span>
+            )}
           </div>
           <p className="text-sm font-medium text-slate-900 truncate">
             {p.licitacao?.objeto ?? `Licitação ${p.licitacaoId.slice(0, 8)}...`}
           </p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {empresa?.nomeFantasia || empresa?.razaoSocial || p.empresaId.slice(0, 8)}
-          </p>
-          {p.observacoes && (
-            <p className="text-xs text-slate-400 mt-1 italic truncate">"{p.observacoes}"</p>
-          )}
+          <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+            <span>{empresa?.nomeFantasia || empresa?.razaoSocial || p.empresaId.slice(0, 8)}</span>
+            {p.licitacao?.uf && <span>{p.licitacao.uf}</span>}
+            {p.licitacao?.modalidade && <span>{p.licitacao.modalidade}</span>}
+          </div>
         </div>
-        <div className="text-right shrink-0">
-          {p.valorProposta && (
-            <p className="text-sm font-semibold text-slate-800">{formatCurrency(p.valorProposta)}</p>
-          )}
-          <p className="text-xs text-slate-400">{formatDate(p.createdAt)}</p>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            {p.valorProposta && (
+              <p className="text-sm font-semibold text-slate-800">{formatCurrency(p.valorProposta)}</p>
+            )}
+            <p className="text-xs text-slate-400">{formatDate(p.createdAt)}</p>
+          </div>
+          <ChevronRight size={16} className="text-slate-300" />
         </div>
       </div>
     </div>
@@ -266,6 +297,7 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
   const [empresaId, setEmpresaId] = useState(preEmpresaId);
   const [licitacaoId, setLicitacaoId] = useState(preLicitacaoId);
   const [licitacoes, setLicitacoes] = useState<Licitacao[]>([]);
+  const [editalUrl, setEditalUrl] = useState('');
   const [valorProposta, setValorProposta] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -278,6 +310,15 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
       .finally(() => setLoadingLics(false));
   }, []);
 
+  useEffect(() => {
+    if (licitacaoId) {
+      const lic = licitacoes.find((l) => l.id === licitacaoId);
+      if (lic?.linkEdital && !editalUrl) {
+        setEditalUrl(lic.linkEdital);
+      }
+    }
+  }, [licitacaoId, licitacoes, editalUrl]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!empresaId || !licitacaoId) {
@@ -287,6 +328,7 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
     try {
       setLoading(true);
       const body: Record<string, unknown> = { empresaId, licitacaoId };
+      if (editalUrl) body.editalUrl = editalUrl;
       if (valorProposta) body.valorProposta = Number(valorProposta);
       if (observacoes) body.observacoes = observacoes;
 
@@ -303,10 +345,11 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
     <Modal open={open} onClose={onClose} title="Registrar Participação" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-700">
-          <p className="font-medium mb-1">O que é registrar uma participação?</p>
+          <p className="font-medium mb-1">O que acontece ao registrar?</p>
           <p>
-            Significa que sua empresa <strong>vai concorrer</strong> nesta licitação. O status
-            inicial é "Analisando". Depois você pode atualizar para "Proposta Enviada", "Em Disputa", etc.
+            O sistema cria a participação e, se houver URL do edital, <strong>automaticamente
+            baixa o PDF, extrai os requisitos e verifica se a empresa tem todos os documentos</strong>.
+            Você já sai sabendo se está apta ou o que falta.
           </p>
         </div>
 
@@ -323,7 +366,7 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
               <option key={e.id} value={e.id}>{e.nomeFantasia || e.razaoSocial}</option>
             ))}
           </select>
-          <FieldHelp text="A empresa que vai participar da licitação. Deve estar cadastrada no sistema." />
+          <FieldHelp text="A empresa que vai participar. Deve ter documentos cadastrados para a análise funcionar." />
         </div>
 
         <div>
@@ -341,7 +384,21 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
               </option>
             ))}
           </select>
-          <FieldHelp text="A licitação em que a empresa quer participar. A lista mostra as licitações importadas do PNCP." />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            URL do Edital (PDF) — preenche automaticamente se disponível
+          </label>
+          <input
+            type="url"
+            value={editalUrl}
+            onChange={(e) => setEditalUrl(e.target.value)}
+            placeholder="https://pncp.gov.br/edital.pdf"
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          />
+          <FieldHelp text="URL direta do PDF do edital. Se preenchida, o sistema analisa automaticamente os requisitos ao criar a participação." />
         </div>
 
         <div>
@@ -358,7 +415,6 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
             className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             disabled={loading}
           />
-          <FieldHelp text="O valor que a empresa pretende ofertar (em reais, sem pontos). Pode ser preenchido depois. Ex: 50000 para R$ 50.000,00." />
         </div>
 
         <div>
@@ -373,7 +429,6 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
             className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
             disabled={loading}
           />
-          <FieldHelp text="Notas internas livres. Ex: 'Edital revisado pela equipe jurídica', 'Precisa de atestado técnico'." />
         </div>
 
         <div className="flex gap-3 pt-2">
@@ -391,191 +446,11 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
           >
             {loading ? (
-              <><Loader2 size={16} className="animate-spin" /> Registrando...</>
+              <><Loader2 size={16} className="animate-spin" /> Criando e analisando...</>
             ) : (
-              'Registrar Participação'
+              'Participar'
             )}
           </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-/* ---- Modal Editar ---- */
-function EditarParticipacaoModal({ open, participacao, onClose, onSuccess, onRemove, onError }: {
-  open: boolean;
-  participacao: Participacao;
-  onClose: () => void;
-  onSuccess: (p: Participacao) => void;
-  onRemove: (id: string) => void;
-  onError: (msg: string) => void;
-}) {
-  const [status, setStatus] = useState<ParticipacaoStatus>(participacao.status);
-  const [valorProposta, setValorProposta] = useState(participacao.valorProposta?.toString() ?? '');
-  const [observacoes, setObservacoes] = useState(participacao.observacoes ?? '');
-  const [loading, setLoading] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [removing, setRemoving] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      setLoading(true);
-      const body: Record<string, unknown> = { status, observacoes };
-      if (valorProposta) body.valorProposta = Number(valorProposta);
-
-      const result = await api.patch<Participacao>(`/participacoes/${participacao.id}`, body);
-      onSuccess(result);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Erro ao atualizar');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleRemove() {
-    try {
-      setRemoving(true);
-      await api.delete(`/participacoes/${participacao.id}`);
-      onRemove(participacao.id);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Erro ao remover');
-    } finally {
-      setRemoving(false);
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Atualizar Participação" size="md">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="bg-slate-50 rounded-lg p-3 text-sm">
-          <p className="font-medium text-slate-900 truncate">
-            {participacao.licitacao?.objeto ?? `Licitação ${participacao.licitacaoId.slice(0, 12)}...`}
-          </p>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Criada em {formatDate(participacao.createdAt)}
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Status</label>
-          <div className="grid grid-cols-1 gap-2">
-            {STATUS_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-                  status === opt.value
-                    ? 'border-purple-400 bg-purple-50'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="status"
-                  value={opt.value}
-                  checked={status === opt.value}
-                  onChange={() => setStatus(opt.value)}
-                  className="accent-purple-600"
-                />
-                <div className="flex-1">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${opt.color}`}>{opt.label}</span>
-                  <span className="text-xs text-slate-500 ml-2">{opt.desc}</span>
-                </div>
-              </label>
-            ))}
-          </div>
-          <FieldHelp text="O status reflete o andamento da participação. Atualize conforme o processo avança: Analisando → Proposta Enviada → Em Disputa → Ganho/Perdido." />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Valor da proposta (R$)
-          </label>
-          <input
-            type="number"
-            value={valorProposta}
-            onChange={(e) => setValorProposta(e.target.value)}
-            placeholder="Ex: 50000"
-            min="0"
-            step="100"
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            disabled={loading}
-          />
-          <FieldHelp text="Valor que foi ou será ofertado na proposta, em reais (sem pontos ou vírgulas). Ex: 150000 = R$ 150.000,00." />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">Observações</label>
-          <textarea
-            value={observacoes}
-            onChange={(e) => setObservacoes(e.target.value)}
-            placeholder="Anotações sobre o andamento..."
-            rows={3}
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-            disabled={loading}
-          />
-          <FieldHelp text="Notas livres para acompanhamento. Ex: 'Aguardando resultado da ata', 'Recurso administrativo protocolado'." />
-        </div>
-
-        <div className="flex gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
-            disabled={loading || removing}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading || removing}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
-          >
-            {loading ? (
-              <><Loader2 size={16} className="animate-spin" /> Salvando...</>
-            ) : (
-              'Salvar Alterações'
-            )}
-          </button>
-        </div>
-
-        {/* Remover */}
-        <div className="border-t border-slate-200 pt-4">
-          {!confirmRemove ? (
-            <button
-              type="button"
-              onClick={() => setConfirmRemove(true)}
-              className="flex items-center gap-2 text-xs text-red-500 hover:text-red-700 transition-colors"
-              disabled={loading || removing}
-            >
-              <Trash2 size={13} />
-              Remover participação
-            </button>
-          ) : (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
-              <p className="text-xs text-red-700 font-medium">Tem certeza? Essa ação não pode ser desfeita.</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmRemove(false)}
-                  className="px-3 py-1.5 text-xs border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50"
-                  disabled={removing}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRemove}
-                  disabled={removing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-                >
-                  {removing ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                  {removing ? 'Removendo...' : 'Sim, remover'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </form>
     </Modal>

@@ -15,18 +15,12 @@ enum MatchStatus {
 
 enum ParticipacaoStatus {
   ANALISANDO
-  PROPOSTA_ENVIADA
-  EM_DISPUTA
-  GANHO
-  PERDIDO
-}
-
-enum LicitacaoExecStatus {
-  ANALISE
-  DOCUMENTOS_OK
   PENDENTE_DOC
-  PRONTO_ENVIO
-  ENVIADO
+  APTA
+  ENVIADA
+  EM_DISPUTA
+  GANHA
+  PERDIDA
 }
 
 enum DocumentoTipo {
@@ -89,10 +83,7 @@ model Empresa {
 
   matches       LicitacaoMatch[]
   participacoes Participacao[]
-
-  documentos            EmpresaDocumento[]
-  licitacaoExecs        LicitacaoExec[]
-  participacoesPreparadas ParticipacaoPreparada[]
+  documentos    EmpresaDocumento[]
 }
 
 model Licitacao {
@@ -120,7 +111,6 @@ model Licitacao {
 
   matches       LicitacaoMatch[]
   participacoes Participacao[]
-  licitacaoExecs LicitacaoExec[]
 
   @@index([uf])
   @@index([modalidade])
@@ -162,11 +152,23 @@ model Participacao {
   valorProposta    Decimal?
   status           ParticipacaoStatus @default(ANALISANDO)
   observacoes      String             @default("")
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+
+  editalUrl                String  @default("")
+  editalTexto              String? @db.Text
+  portalLink               String  @default("")
+  documentosOk             Boolean @default(false)
+  checklist                Json?
+  percentualConformidade   Int     @default(0)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   licitacao Licitacao @relation(fields: [licitacaoId], references: [id], onDelete: Cascade)
+
+  documentosExigidos DocumentoExigido[]
+  conformidades      ConformidadeDocumento[]
+  prazos             PrazosEdital?
 
   @@unique([empresaId, licitacaoId])
   @@index([empresaId])
@@ -174,33 +176,9 @@ model Participacao {
   @@index([status])
 }
 
-model LicitacaoExec {
-  id          String              @id @default(uuid())
-  licitacaoId String
-  empresaId   String
-  editalUrl   String
-  editalTexto String?             @db.Text
-  portalLink  String              @default("")
-  status      LicitacaoExecStatus @default(ANALISE)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-
-  licitacao Licitacao @relation(fields: [licitacaoId], references: [id], onDelete: Cascade)
-  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-
-  documentosExigidos    DocumentoExigido[]
-  conformidades         ConformidadeDocumento[]
-  prazos                PrazosEdital?
-  participacaoPreparada ParticipacaoPreparada?
-
-  @@index([licitacaoId])
-  @@index([empresaId])
-  @@index([status])
-}
-
 model DocumentoExigido {
   id                  String       @id @default(uuid())
-  licitacaoExecId     String
+  participacaoId      String
   tipo                DocumentoTipo
   nome                String
   secaoEdital         String       @default("")
@@ -210,10 +188,10 @@ model DocumentoExigido {
   referenciaEdital    String       @default("") @db.Text
   createdAt           DateTime     @default(now())
 
-  licitacaoExec LicitacaoExec @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
+  participacao  Participacao @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
   conformidades ConformidadeDocumento[]
 
-  @@index([licitacaoExecId])
+  @@index([participacaoId])
   @@index([tipo])
 }
 
@@ -239,7 +217,7 @@ model EmpresaDocumento {
 
 model ConformidadeDocumento {
   id                 String             @id @default(uuid())
-  licitacaoExecId    String
+  participacaoId     String
   empresaId          String
   documentoExigidoId String
   empresaDocumentoId String?
@@ -247,17 +225,17 @@ model ConformidadeDocumento {
   observacao         String             @default("")
   createdAt          DateTime           @default(now())
 
-  licitacaoExec    LicitacaoExec    @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
+  participacao     Participacao     @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
   documentoExigido DocumentoExigido @relation(fields: [documentoExigidoId], references: [id], onDelete: Cascade)
   empresaDocumento EmpresaDocumento? @relation(fields: [empresaDocumentoId], references: [id], onDelete: SetNull)
 
-  @@index([licitacaoExecId])
+  @@index([participacaoId])
   @@index([empresaId])
 }
 
 model PrazosEdital {
   id                  String    @id @default(uuid())
-  licitacaoExecId     String    @unique
+  participacaoId      String    @unique
   dataAbertura        DateTime?
   dataSessao          DateTime?
   prazoImpugnacao     DateTime?
@@ -265,21 +243,5 @@ model PrazosEdital {
   prazoRecurso        DateTime?
   createdAt           DateTime  @default(now())
 
-  licitacaoExec LicitacaoExec @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
-}
-
-model ParticipacaoPreparada {
-  id              String   @id @default(uuid())
-  licitacaoExecId String   @unique
-  empresaId       String
-  documentosOk    Boolean  @default(false)
-  checklist       Json     @default("[]")
-  propostaBase    Decimal?
-  prontoParaEnvio Boolean  @default(false)
-  createdAt       DateTime @default(now())
-
-  licitacaoExec LicitacaoExec @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
-  empresa       Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-
-  @@index([empresaId])
+  participacao Participacao @relation(fields: [participacaoId], references: [id], onDelete: Cascade)
 }

@@ -1,6 +1,22 @@
 import prisma from "../lib/prisma.js";
 import { Prisma } from "../generated/prisma/client.js";
 
+const includeBasic = {
+  licitacao: true,
+  empresa: true,
+} as const;
+
+const includeFull = {
+  licitacao: true,
+  empresa: true,
+  documentosExigidos: { orderBy: { tipo: "asc" as const } },
+  conformidades: {
+    include: { documentoExigido: true, empresaDocumento: true },
+    orderBy: { createdAt: "asc" as const },
+  },
+  prazos: true,
+} as const;
+
 export async function findByEmpresaAndLicitacao(
   empresaId: string,
   licitacaoId: string
@@ -13,14 +29,14 @@ export async function findByEmpresaAndLicitacao(
 export async function findById(id: string) {
   return prisma.participacao.findUnique({
     where: { id },
-    include: { licitacao: true, empresa: true },
+    include: includeFull,
   });
 }
 
 export async function create(data: Prisma.ParticipacaoUncheckedCreateInput) {
   return prisma.participacao.create({
     data,
-    include: { licitacao: true },
+    include: includeBasic,
   });
 }
 
@@ -28,7 +44,15 @@ export async function update(id: string, data: Prisma.ParticipacaoUpdateInput) {
   return prisma.participacao.update({
     where: { id },
     data,
-    include: { licitacao: true },
+    include: includeBasic,
+  });
+}
+
+export async function updateFull(id: string, data: Prisma.ParticipacaoUpdateInput) {
+  return prisma.participacao.update({
+    where: { id },
+    data,
+    include: includeFull,
   });
 }
 
@@ -51,7 +75,11 @@ export async function findWithFilters(filtros: ParticipacaoFiltros) {
 
   return prisma.participacao.findMany({
     where,
-    include: { licitacao: true },
+    include: {
+      licitacao: true,
+      empresa: true,
+      prazos: true,
+    },
     orderBy: { createdAt: "desc" },
   });
 }

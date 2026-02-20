@@ -7,7 +7,7 @@ export async function registrar(
   next: NextFunction
 ) {
   try {
-    const { empresaId, licitacaoId, valorProposta, observacoes } = req.body;
+    const { empresaId, licitacaoId, editalUrl, portalLink, valorProposta, observacoes } = req.body;
 
     if (!empresaId || typeof empresaId !== "string") {
       res.status(400).json({ error: "'empresaId' é obrigatório" });
@@ -25,11 +25,26 @@ export async function registrar(
     const participacao = await participacaoService.registrar({
       empresaId,
       licitacaoId,
+      editalUrl,
+      portalLink,
       valorProposta,
       observacoes: observacoes ?? "",
     });
 
     res.status(201).json(participacao);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function obterDetalhe(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const participacao = await participacaoService.obterDetalhe(req.params.id as string);
+    res.json(participacao);
   } catch (err) {
     next(err);
   }
@@ -88,6 +103,19 @@ export async function listar(
     });
 
     res.json(participacoes);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reprocessarDocumentos(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const result = await participacaoService.reprocessarDocumentos(req.params.id as string);
+    res.json(result);
   } catch (err) {
     next(err);
   }
