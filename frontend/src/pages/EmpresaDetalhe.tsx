@@ -4,7 +4,8 @@ import {
   ArrowLeft, Building2, MapPin, FileText, Star, Settings,
   Loader2, AlertCircle, Download, Hash,
   Handshake, Calendar, Tag, Globe, Banknote, Brain,
-  ExternalLink, XCircle, Clock,
+  ExternalLink, XCircle, Clock, Plus, Trash2, CheckCircle2,
+  Shield,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCnpj, formatCurrency, formatDate } from '../lib/constants';
@@ -14,7 +15,7 @@ import { EditarPreferenciasModal } from '../components/EditarPreferenciasModal';
 import { ImportarLicitacoesModal } from '../components/ImportarLicitacoesModal';
 import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
-import type { Empresa, LicitacaoMatch, Licitacao, MatchStatus } from '../types';
+import type { Empresa, LicitacaoMatch, Licitacao, MatchStatus, EmpresaDocumento, DocumentoTipo, DocumentoStatusType } from '../types';
 
 type MatchComLicitacao = LicitacaoMatch & { licitacao: Licitacao };
 
@@ -56,6 +57,9 @@ export function EmpresaDetalhe() {
   const [scoreMin, setScoreMin] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'ativos' | 'FAVORITO' | 'DESCARTADO' | 'todos'>('ativos');
 
+  const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
+  const [showAddDoc, setShowAddDoc] = useState(false);
+
   const [selectedLicId, setSelectedLicId] = useState<string | null>(null);
   const [licDetalhe, setLicDetalhe] = useState<LicitacaoDetalhe | null>(null);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
@@ -67,12 +71,14 @@ export function EmpresaDetalhe() {
   async function loadData(empresaId: string) {
     try {
       setLoading(true);
-      const [emp, matchesData] = await Promise.all([
+      const [emp, matchesData, docsData] = await Promise.all([
         api.get<Empresa>(`/empresas/${empresaId}`),
         api.get<MatchComLicitacao[]>(`/empresas/${empresaId}/matches?scoreMin=0&limit=200`),
+        api.get<EmpresaDocumento[]>(`/empresas/${empresaId}/documentos`),
       ]);
       setEmpresa(emp);
       setMatches(matchesData);
+      setDocumentos(docsData);
     } catch (err) {
       addToast('error', err instanceof Error ? err.message : 'Erro ao carregar dados');
     } finally {
@@ -361,6 +367,65 @@ export function EmpresaDetalhe() {
           </div>
         </div>
       </div>
+
+      {/* === SEÇÃO 5: Documentos === */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Shield size={18} className="text-teal-600" />
+            <h2 className="font-semibold text-slate-900">Documentos da Empresa</h2>
+            <span className="text-xs text-slate-400">({documentos.length})</span>
+          </div>
+          <button
+            onClick={() => setShowAddDoc(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 transition-colors"
+          >
+            <Plus size={14} /> Adicionar Documento
+          </button>
+        </div>
+
+        <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 mb-4 text-xs text-teal-700">
+          Cadastre aqui os documentos de habilitação da empresa (CNDs, FGTS, Contrato Social, etc.).
+          Eles serão comparados com as exigências dos editais no módulo de Disputas.
+        </div>
+
+        {documentos.length === 0 ? (
+          <div className="text-center py-8">
+            <FileText size={36} className="text-slate-300 mx-auto mb-2" />
+            <p className="text-sm text-slate-400 mb-1">Nenhum documento cadastrado.</p>
+            <p className="text-xs text-slate-400">Adicione documentos para verificar conformidade com editais.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {documentos.map((doc) => (
+              <DocCard
+                key={doc.id}
+                doc={doc}
+                empresaId={empresa.id}
+                onRemove={(docId) => {
+                  setDocumentos((prev) => prev.filter((d) => d.id !== docId));
+                  addToast('success', 'Documento removido');
+                }}
+                onError={(msg) => addToast('error', msg)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showAddDoc && empresa && (
+        <AddDocumentoModal
+          open={showAddDoc}
+          empresaId={empresa.id}
+          onClose={() => setShowAddDoc(false)}
+          onSuccess={(doc) => {
+            setDocumentos((prev) => [...prev, doc]);
+            setShowAddDoc(false);
+            addToast('success', 'Documento cadastrado!');
+          }}
+          onError={(msg) => addToast('error', msg)}
+        />
+      )}
 
       {/* === Estatísticas === */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -707,5 +772,206 @@ function ScoreDetail({ label, value }: { label: string; value: number }) {
       <p className="text-[10px] text-slate-400">{label}</p>
       <p className="font-medium">{(value * 100).toFixed(0)}%</p>
     </div>
+  );
+}
+
+const DOC_TIPOS: { value: DocumentoTipo; label: string }[] = [
+  { value: 'CND_FEDERAL', label: 'CND Federal' },
+  { value: 'CND_ESTADUAL', label: 'CND Estadual' },
+  { value: 'CND_MUNICIPAL', label: 'CND Municipal' },
+  { value: 'CND_TRABALHISTA', label: 'CND Trabalhista (CNDT)' },
+  { value: 'FGTS', label: 'FGTS (CRF)' },
+  { value: 'BALANCO_PATRIMONIAL', label: 'Balanço Patrimonial' },
+  { value: 'ATESTADO_TECNICO', label: 'Atestado Técnico' },
+  { value: 'CONTRATO_SOCIAL', label: 'Contrato Social' },
+  { value: 'ALVARA', label: 'Alvará de Funcionamento' },
+  { value: 'CERTIDAO_FALENCIA', label: 'Certidão Falência' },
+  { value: 'SICAF', label: 'SICAF' },
+  { value: 'CNPJ_CARTAO', label: 'Cartão CNPJ' },
+  { value: 'PROCURACAO', label: 'Procuração' },
+  { value: 'DECLARACAO_ME_EPP', label: 'Declaração ME/EPP' },
+  { value: 'DECLARACAO_INEXISTENCIA_FATO', label: 'Declaração Fato Impeditivo' },
+  { value: 'DECLARACAO_MENOR', label: 'Declaração de Menor' },
+  { value: 'REGISTRO_CONSELHO', label: 'Registro Conselho (CREA/CAU)' },
+  { value: 'OUTRO', label: 'Outro' },
+];
+
+const DOC_STATUS_CFG: Record<DocumentoStatusType, { label: string; color: string }> = {
+  VALIDO: { label: 'Válido', color: 'bg-green-100 text-green-700' },
+  VENCIDO: { label: 'Vencido', color: 'bg-red-100 text-red-700' },
+  AUSENTE: { label: 'Ausente', color: 'bg-slate-100 text-slate-500' },
+};
+
+function DocCard({ doc, empresaId, onRemove, onError }: {
+  doc: EmpresaDocumento;
+  empresaId: string;
+  onRemove: (id: string) => void;
+  onError: (msg: string) => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+  const statusCfg = DOC_STATUS_CFG[doc.status] ?? DOC_STATUS_CFG.AUSENTE;
+  const tipoLabel = DOC_TIPOS.find((t) => t.value === doc.tipo)?.label ?? doc.tipo;
+
+  async function handleRemove() {
+    try {
+      setRemoving(true);
+      await api.delete(`/empresas/${empresaId}/documentos/${doc.id}`);
+      onRemove(doc.id);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Erro ao remover');
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors">
+      <div className="p-2 rounded-lg bg-teal-50 shrink-0">
+        {doc.status === 'VALIDO' ? (
+          <CheckCircle2 size={16} className="text-green-600" />
+        ) : doc.status === 'VENCIDO' ? (
+          <AlertCircle size={16} className="text-red-500" />
+        ) : (
+          <FileText size={16} className="text-slate-400" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-900">{doc.nome}</span>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded ${statusCfg.color}`}>{statusCfg.label}</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+          <span className="bg-slate-100 px-1.5 py-0.5 rounded">{tipoLabel}</span>
+          {doc.emissor && <span>Emissor: {doc.emissor}</span>}
+          {doc.validade && <span>Validade: {formatDate(doc.validade)}</span>}
+        </div>
+      </div>
+      <button
+        onClick={handleRemove}
+        disabled={removing}
+        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+        title="Remover documento"
+      >
+        {removing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+      </button>
+    </div>
+  );
+}
+
+function AddDocumentoModal({ open, empresaId, onClose, onSuccess, onError }: {
+  open: boolean;
+  empresaId: string;
+  onClose: () => void;
+  onSuccess: (doc: EmpresaDocumento) => void;
+  onError: (msg: string) => void;
+}) {
+  const [tipo, setTipo] = useState<DocumentoTipo | ''>('');
+  const [nome, setNome] = useState('');
+  const [validade, setValidade] = useState('');
+  const [emissor, setEmissor] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  function handleTipoChange(value: string) {
+    setTipo(value as DocumentoTipo);
+    const found = DOC_TIPOS.find((t) => t.value === value);
+    if (found && !nome) setNome(found.label);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tipo || !nome) {
+      onError('Selecione o tipo e informe o nome do documento');
+      return;
+    }
+    try {
+      setLoading(true);
+      const body: Record<string, unknown> = { tipo, nome };
+      if (validade) body.validade = new Date(validade).toISOString();
+      if (emissor) body.emissor = emissor;
+      const result = await api.post<EmpresaDocumento>(`/empresas/${empresaId}/documentos`, body);
+      onSuccess(result);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Erro ao cadastrar');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Adicionar Documento" size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo do Documento</label>
+          <select
+            value={tipo}
+            onChange={(e) => handleTipoChange(e.target.value)}
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          >
+            <option value="">Selecione o tipo...</option>
+            {DOC_TIPOS.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Nome / Descrição</label>
+          <input
+            type="text"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            placeholder="Ex: CND Federal - emitida em 15/01/2026"
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Data de Validade — opcional</label>
+          <input
+            type="date"
+            value={validade}
+            onChange={(e) => setValidade(e.target.value)}
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">Emissor — opcional</label>
+          <input
+            type="text"
+            value={emissor}
+            onChange={(e) => setEmissor(e.target.value)}
+            placeholder="Ex: Receita Federal, Junta Comercial..."
+            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            disabled={loading}
+          />
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+            disabled={loading}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={loading || !tipo || !nome}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
+          >
+            {loading ? (
+              <><Loader2 size={16} className="animate-spin" /> Salvando...</>
+            ) : (
+              'Cadastrar Documento'
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

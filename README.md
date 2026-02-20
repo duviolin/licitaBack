@@ -1,8 +1,38 @@
-# Licitações MVP — Recomendação e Gestão de Licitações Públicas
+# Licitações MVP — Recomendação, Gestão e Disputa de Licitações Públicas
 
-Sistema completo (backend + frontend) para recomendar licitações públicas a empresas brasileiras com base em score de aderência NLP.
+Sistema completo (backend + frontend) para recomendar licitações públicas a empresas brasileiras com base em score de aderência NLP, analisar editais automaticamente e preparar participação em certames.
 
-**Status: ✅ MVP Completo — Backend (4 etapas) + Frontend Dashboard (4 etapas) + Importação Inteligente (Score-First)**
+---
+
+## Status Atual — O que funciona e o que não funciona
+
+### Funcional (pode usar agora)
+
+| Funcionalidade | Descrição |
+|---|---|
+| **Cadastro de empresa por CNPJ** | Consulta BrasilAPI, extrai CNAEs, gera stems NLP automaticamente |
+| **Configuração de preferências** | Palavras-chave, UFs, modalidades, faixa de valor — impactam o score |
+| **Importação de licitações do PNCP** | Busca por período/UF/modalidade, calcula score antes de salvar (score-first) |
+| **Score de aderência NLP** | 60% textual (Jaccard stems) + 25% geográfico + 15% valor |
+| **Matches empresa×licitação** | Ranking, favoritar, descartar, filtrar por score |
+| **Participações** | Registrar, acompanhar status (Analisando→Enviada→Disputa→Ganho/Perdido) |
+| **Documentos da empresa** | Cadastrar CNDs, FGTS, Contrato Social, Atestados, etc. com validade |
+| **Análise automática de edital** | Baixa PDF, extrai texto, identifica documentos exigidos e prazos |
+| **Verificação de conformidade** | Compara docs da empresa × exigências do edital, indica faltantes/vencidos |
+| **Checklist de participação** | Percentual de conformidade, indicação se empresa está apta |
+| **Reprocessamento** | Após cadastrar novos docs, reavalia conformidade automaticamente |
+
+### NÃO funcional (ainda não existe)
+
+| Item | Status |
+|---|---|
+| **Autenticação / Login** | Não existe. O sistema é aberto, sem controle de acesso |
+| **Login em portais (BLL/BNC/ComprasNet)** | Stub. Não há integração real com portais de compras |
+| **Envio automático de proposta** | Stub. O `portalExecutorService` tem apenas funções placeholder |
+| **Upload de arquivos de documentos** | Não existe. O campo `arquivoUrl` é preenchido manualmente |
+| **OCR para editais escaneados** | O parser só funciona com PDFs que possuem texto extraível |
+| **Extração de prazos com alta precisão** | Pode pegar datas de referências legislativas ao invés de datas do edital |
+| **Multi-tenant / Multi-usuário** | Não existe separação de dados por usuário |
 
 ---
 
@@ -15,6 +45,7 @@ Sistema completo (backend + frontend) para recomendar licitações públicas a e
 | PostgreSQL (Neon) | Banco de dados |
 | Prisma 7 + adapter-pg | ORM com driver adapter |
 | @nlpjs/lang-pt | Tokenização, stemming e stopwords PT-BR |
+| pdf-parse | Extração de texto de PDFs de editais |
 | BrasilAPI | Consulta CNPJ (gratuita, sem auth) |
 | PNCP | Portal Nacional de Contratações Públicas |
 | React 19 + Vite 7 | Frontend SPA |
@@ -50,86 +81,42 @@ npm run start       # Express serve API + frontend estático
 
 ---
 
-## Scripts
-
-| Script | Descrição |
-|---|---|
-| `dev` | Setup automático + servidor backend com hot-reload |
-| `dev:front` | Dev server frontend (Vite + proxy) |
-| `build` | Build backend (Prisma generate + tsc) |
-| `build:front` | Build frontend (tsc + vite build) |
-| `build:all` | Build backend + frontend |
-| `start` | Produção (migrate + serve) |
-| `db:generate` | Gerar Prisma Client |
-| `db:migrate` | Aplicar migrations |
-| `db:push` | Sincronizar schema |
-| `db:studio` | Interface visual do banco |
-
----
-
-## Arquitetura
+## Fluxo de Uso Completo
 
 ```
-┌──────────────────────────────────────────────┐
-│                  Frontend                     │
-│  React 19 + Vite + Tailwind + React Router   │
-│  (porta 5173 dev / estático em produção)      │
-└───────────────────┬──────────────────────────┘
-                    │ /api/* proxy
-┌───────────────────▼──────────────────────────┐
-│                  Backend                      │
-│  Express 5 + TypeScript ESM                   │
-│  Routes → Controllers → Services → Repos      │
-│                    ↓                          │
-│              Clients (BrasilAPI, PNCP)         │
-│              Utils (NLP, Score)                │
-└───────────────────┬──────────────────────────┘
-                    │
-              PostgreSQL (Neon)
+1. Cadastrar empresa por CNPJ
+   └→ Configurar preferências (palavras-chave, UFs, modalidades, valor)
+
+2. Importar licitações do PNCP
+   └→ Sistema calcula score e mostra matches relevantes
+
+3. Cadastrar documentos da empresa
+   └→ CNDs, FGTS, Contrato Social, Atestados, etc.
+
+4. Iniciar análise de edital (Disputas)
+   └→ Baixa PDF → Extrai texto → Identifica requisitos → Verifica conformidade
+   └→ Gera checklist: "14 documentos exigidos, 10 OK, 4 pendentes, 71% conformidade"
+
+5. Corrigir pendências
+   └→ Cadastrar docs faltantes → Reprocessar → Verificar se ficou 100%
+
+6. [FUTURO] Enviar proposta via portal
+   └→ Ainda não implementado — stub para automação futura
 ```
 
 ---
 
-## Importação Inteligente (Score-First)
+## Frontend — 6 Páginas
 
-O sistema usa uma abordagem inteligente para importação de licitações:
-
-```
-PNCP → Busca licitações → Calcula score EM MEMÓRIA → Só salva as relevantes
-```
-
-| Aspecto | Como funciona |
-|---|---|
-| **Pre-filtering** | Score é calculado ANTES de salvar no banco |
-| **Score mínimo** | Configurável (0% a 70%, padrão 30%) |
-| **Por empresa** | Pode importar focado em uma empresa específica |
-| **Resultado detalhado** | Mostra: consultadas, duplicadas, descartadas (score baixo), importadas |
-| **Banco limpo** | Só licitações relevantes ocupam espaço |
-
-### Exemplo de resultado:
-```
-327 consultadas no PNCP
- → 12 já existiam (duplicatas)
- → 270 descartadas (score < 30%)
- → 45 importadas (relevantes)
- → 68 matches calculados
-```
-
----
-
-## Frontend — Dashboard
-
-5 páginas com interface auto-explicativa:
-
-| Página | Funcionalidades |
-|---|---|
-| **Dashboard** | Cards de resumo, top matches, participações recentes, fluxo de uso |
-| **Empresas** | Lista com busca/filtro, cadastro por CNPJ, editar preferências (tags), detalhe com matches |
-| **Licitações** | Lista paginada, filtros avançados (UF, modalidade, esfera, situação), importar do PNCP |
-| **Matches** | Visão cruzada empresa×licitação, filtro por score, breakdown (textual/geo/valor), tooltips |
-| **Participações** | CRUD completo, status visual (Analisando→Enviada→Disputa→Ganho/Perdido), filtros |
-
-Todos os formulários possuem textos explicativos detalhados sobre cada campo.
+| Página | Rota | Funcionalidades |
+|---|---|---|
+| **Dashboard** | `/` | Cards de resumo, top matches, participações recentes |
+| **Empresas** | `/empresas` | Lista, cadastro por CNPJ, detalhe com matches e **documentos** |
+| **Empresa Detalhe** | `/empresas/:id` | Dados cadastrais, CNAEs, NLP, preferências, **documentos (CRUD)**, matches |
+| **Matches** | `/matches` | Empresa×licitação, score breakdown, favoritar/descartar |
+| **Participações** | `/participacoes` | CRUD, funil de status, filtros |
+| **Disputas** | `/licitacao-exec` | Lista de análises, iniciar nova análise de edital |
+| **Disputa Detalhe** | `/licitacao-exec/:id` | Prazos, documentos exigidos, conformidade, checklist, reprocessar |
 
 ---
 
@@ -143,25 +130,67 @@ Todos os formulários possuem textos explicativos detalhados sobre cada campo.
 ### Empresas — `/empresas`
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/empresas/cnpj` | Cadastra via BrasilAPI. Gera stems NLP. Calcula matches. |
+| POST | `/empresas/cnpj` | Cadastra via BrasilAPI. Gera stems NLP. |
 | PATCH | `/empresas/:id/preferencias` | Atualiza preferências. Recalcula matches. |
 | GET | `/empresas` | Lista todas. |
 | GET | `/empresas/:id` | Detalhe completo. |
-| GET | `/empresas/:id/matches` | Matches por score. Filtros: `scoreMin`, `apenasAbertas`, `limit`. |
+| GET | `/empresas/:id/matches` | Matches por score. Filtros: `scoreMin`, `limit`. |
+| GET | `/empresas/:id/documentos` | Lista documentos da empresa. |
+| POST | `/empresas/:id/documentos` | Cadastra documento (tipo, nome, validade, emissor). |
+| PATCH | `/empresas/:id/documentos/:docId` | Atualiza documento. |
+| DELETE | `/empresas/:id/documentos/:docId` | Remove documento. |
 
 ### Licitações — `/licitacoes`
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/licitacoes/importar` | **Importação Inteligente.** Params: `dataInicial`, `dataFinal`, `uf`, `codigoModalidade`, `scoreMinimo` (0-1, default 0.3), `empresaId` (opcional). |
-| GET | `/licitacoes` | Filtros: `empresaId`, `scoreMin`, `modalidade`, `uf`, `esfera`, `situacao`, `valorMin/Max`, `apenasAbertas`, `dataMinima`, `page/limit`. |
+| POST | `/licitacoes/importar` | Importação score-first do PNCP. |
+| GET | `/licitacoes` | Filtros: `uf`, `modalidade`, `esfera`, `situacao`, etc. |
 | GET | `/licitacoes/:id` | Detalhe com matches por empresa. |
 
 ### Participações — `/participacoes`
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/participacoes` | Registra (status: ANALISANDO). Valida empresa+licitação, bloqueia duplicata. |
+| POST | `/participacoes` | Registra participação. |
 | GET | `/participacoes` | Filtros: `empresaId`, `status`. |
-| PATCH | `/participacoes/:id` | Atualiza `status`, `valorProposta`, `observacoes`. |
+| PATCH | `/participacoes/:id` | Atualiza status/valor/observações. |
+| DELETE | `/participacoes/:id` | Remove. |
+
+### Disputas — `/licitacao-exec`
+| Método | Endpoint | Descrição |
+|---|---|---|
+| POST | `/licitacao-exec/iniciar` | Inicia análise (baixa PDF, extrai requisitos, verifica conformidade). Body: `licitacaoId`, `editalUrl`, `empresaId`, `portalLink?`. |
+| GET | `/licitacao-exec` | Lista análises. Filtro: `?empresaId=`. |
+| GET | `/licitacao-exec/:id` | Visão geral completa com todas as relações. |
+| GET | `/licitacao-exec/:id/documentos-exigidos` | Documentos extraídos do edital. |
+| GET | `/licitacao-exec/:id/conformidade` | Resultado da verificação documental. |
+| GET | `/licitacao-exec/:id/prazos` | Prazos extraídos (abertura, sessão, impugnação, etc.). |
+| GET | `/licitacao-exec/:id/checklist` | Checklist de participação com % conformidade. |
+| POST | `/licitacao-exec/:id/reprocessar-docs` | Reavalia conformidade (após cadastrar novos docs). |
+
+---
+
+## Tipos de Documentos Suportados
+
+| Tipo | Descrição | Validade Padrão |
+|---|---|---|
+| CND_FEDERAL | Certidão Negativa de Débitos Federais | 180 dias |
+| CND_ESTADUAL | Certidão Negativa de Débitos Estaduais | 180 dias |
+| CND_MUNICIPAL | Certidão Negativa de Débitos Municipais | 180 dias |
+| CND_TRABALHISTA | CNDT (TST) | 180 dias |
+| FGTS | Certificado de Regularidade (CRF) | 30 dias |
+| BALANCO_PATRIMONIAL | Balanço e Demonstrações Contábeis | — |
+| ATESTADO_TECNICO | Atestado de Capacidade Técnica | — |
+| CONTRATO_SOCIAL | Contrato Social / Ato Constitutivo | — |
+| ALVARA | Alvará de Funcionamento | — |
+| CERTIDAO_FALENCIA | Certidão Negativa de Falência | 90 dias |
+| SICAF | Registro no SICAF | — |
+| CNPJ_CARTAO | Comprovante de Inscrição no CNPJ | — |
+| PROCURACAO | Procuração / Credenciamento | — |
+| DECLARACAO_ME_EPP | Declaração de ME/EPP | — |
+| DECLARACAO_INEXISTENCIA_FATO | Declaração de Fato Impeditivo | — |
+| DECLARACAO_MENOR | Declaração de Não Emprego de Menores | — |
+| REGISTRO_CONSELHO | Registro CREA/CAU/CRA/OAB | — |
+| OUTRO | Documento não classificado | — |
 
 ---
 
@@ -184,40 +213,39 @@ scoreTotal = scoreTextual × 0.60 + scoreGeográfico × 0.25 + scoreValor × 0.1
 ```
 licitaBack/
 ├── prisma/
-│   └── schema.prisma                  # 4 models + enum
-├── prisma.config.ts                   # Config Prisma v7
-├── scripts/
-│   └── dev-setup.js                   # Setup automático
+│   └── schema.prisma                    # 10 models + 6 enums
 ├── src/
-│   ├── config/                        # load-env.ts + env.ts
-│   ├── lib/                           # prisma.ts (singleton)
+│   ├── config/                          # load-env.ts + env.ts
+│   ├── lib/                             # prisma.ts (singleton)
 │   ├── clients/
-│   │   ├── brasilApiClient.ts         # Consulta CNPJ
-│   │   └── pncpClient.ts             # PNCP com paginação + retry
+│   │   ├── brasilApiClient.ts           # Consulta CNPJ
+│   │   └── pncpClient.ts               # PNCP com paginação + retry
 │   ├── utils/
-│   │   ├── text.ts                    # NLP pipeline PT-BR
-│   │   └── score.ts                   # Score composto
-│   ├── repositories/                  # CRUD + filtros ricos
-│   ├── services/                      # Lógica de negócio
-│   ├── controllers/                   # Validação HTTP
-│   ├── routes/                        # 11 endpoints
-│   ├── middleware/                     # Error handler
-│   ├── app.ts                         # Express app + serve frontend
-│   └── server.ts                      # Entry point
-├── frontend/                          # React 19 + Vite 7
+│   │   ├── text.ts                      # NLP pipeline PT-BR
+│   │   └── score.ts                     # Score composto
+│   ├── repositories/                    # CRUD base (empresa, licitacao, match, participacao)
+│   ├── services/                        # Lógica de negócio + empresaDocumentoService
+│   ├── controllers/                     # Validação HTTP
+│   ├── routes/                          # empresa, licitacao, participacao
+│   ├── middleware/                       # Error handler inteligente
+│   ├── modules/
+│   │   └── licitacaoExec/               # Módulo de Disputas (autocontido)
+│   │       ├── types/                   # Interfaces do módulo
+│   │       ├── utils/                   # Regex para parsing de editais brasileiros
+│   │       ├── repositories/            # 6 repositories (exec, docs, conformidade, prazos...)
+│   │       ├── services/                # 7 services (parser, requisitos, prazos, conformidade...)
+│   │       ├── controllers/             # Controller único
+│   │       └── routes/                  # 8 endpoints
+│   ├── app.ts                           # Express app
+│   └── server.ts                        # Entry point
+├── frontend/
 │   ├── src/
-│   │   ├── components/                # Modal, TagInput, Toast, FieldHelp, etc.
-│   │   ├── pages/                     # Dashboard, Empresas, Licitações, Matches, Participações
-│   │   ├── hooks/                     # useToast
-│   │   ├── lib/                       # api.ts, constants.ts
-│   │   └── types.ts                   # Tipos alinhados com Prisma schema
-│   ├── package.json
-│   └── vite.config.ts                 # Proxy /api → localhost:3000
-├── docs/
-│   └── GUIA_DO_USUARIO.md            # Documentação para cliente não-técnico
-├── API.json                           # Coleção Insomnia
-├── .env.example
-├── package.json
+│   │   ├── components/                  # Modal, Toast, TagInput, PageHeader, etc.
+│   │   ├── pages/                       # 7 páginas (Dashboard, Empresas, Matches, Participações, Disputas...)
+│   │   ├── hooks/                       # useToast
+│   │   ├── lib/                         # api.ts, constants.ts
+│   │   └── types.ts                     # Tipos alinhados com Prisma schema
+│   └── vite.config.ts                   # Proxy /api → localhost:3000
 └── README.md
 ```
 
@@ -235,21 +263,31 @@ licitaBack/
 
 ---
 
-## Roadmap Concluído
+## Roadmap
 
 ```
 Backend
 ├── Etapa 1 ✅  Fundação (setup, schema, NLP, score, config)
 ├── Etapa 2 ✅  Módulo Empresas (BrasilAPI, CRUD, matches)
-├── Etapa 3 ✅  Módulo Licitações (PNCP, importação, filtros)
-└── Etapa 4 ✅  Módulo Participações (CRUD, status workflow)
+├── Etapa 3 ✅  Módulo Licitações (PNCP, importação score-first)
+├── Etapa 4 ✅  Módulo Participações (CRUD, status workflow)
+├── Etapa 5 ✅  Módulo Disputas (análise edital, conformidade, checklist)
+└── Etapa 6 ✅  Documentos da Empresa (CRUD, tipos, validade)
 
 Frontend
-├── Etapa F1 ✅  Setup + Layout + Dashboard
-├── Etapa F2 ✅  Módulo Empresas (CRUD, tags, modais)
-├── Etapa F3 ✅  Módulo Licitações (importar, filtros, detalhe)
-└── Etapa F4 ✅  Módulo Matches + Participações + Auto-explicativo
+├── Etapa F1 ✅  Layout + Dashboard
+├── Etapa F2 ✅  Empresas (CRUD, tags, modais)
+├── Etapa F3 ✅  Licitações (importar, filtros)
+├── Etapa F4 ✅  Matches + Participações
+├── Etapa F5 ✅  Disputas (análise, conformidade, checklist)
+└── Etapa F6 ✅  Documentos da Empresa (CRUD na página de detalhe)
 
-Melhorias
-└── Importação Inteligente ✅  Score-First (calcula antes de salvar)
+Próximos passos (não implementado)
+├── ⬜ Autenticação (login, multi-usuário)
+├── ⬜ Upload de arquivos de documentos (S3/MinIO)
+├── ⬜ Integração real com portais (BLL, BNC, ComprasNet via RPA)
+├── ⬜ OCR para editais escaneados
+├── ⬜ Melhoria na extração de prazos (NLP contextual)
+├── ⬜ Notificações (prazos vencendo, docs expirando)
+└── ⬜ Dashboard de métricas (taxa de ganho, funil)
 ```

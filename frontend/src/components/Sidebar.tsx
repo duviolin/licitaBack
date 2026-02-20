@@ -4,6 +4,7 @@ import {
   Building2,
   Handshake,
   Star,
+  FileSearch,
 } from 'lucide-react';
 
 const links = [
@@ -11,6 +12,7 @@ const links = [
   { to: '/empresas', label: 'Empresas', icon: Building2 },
   { to: '/matches', label: 'Matches', icon: Star },
   { to: '/participacoes', label: 'Participações', icon: Handshake },
+  { to: '/licitacao-exec', label: 'Disputas', icon: FileSearch },
 ];
 
 export function Sidebar() {

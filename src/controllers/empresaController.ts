@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as empresaService from "../services/empresaService.js";
+import * as empresaDocService from "../services/empresaDocumentoService.js";
 
 export async function cadastrarPorCnpj(
   req: Request,
@@ -92,6 +93,72 @@ export async function obterEmpresa(
   try {
     const empresa = await empresaService.obterEmpresa(req.params.id as string);
     res.json(empresa);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function listarDocumentos(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const docs = await empresaDocService.listar(req.params.id as string);
+    res.json(docs);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function criarDocumento(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const { tipo, nome, arquivoUrl, validade, emissor } = req.body;
+    if (!tipo || typeof tipo !== "string") {
+      res.status(400).json({ error: "'tipo' é obrigatório" });
+      return;
+    }
+    if (!nome || typeof nome !== "string") {
+      res.status(400).json({ error: "'nome' é obrigatório" });
+      return;
+    }
+    const doc = await empresaDocService.criar(req.params.id as string, {
+      tipo, nome, arquivoUrl, validade, emissor,
+    });
+    res.status(201).json(doc);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function atualizarDocumento(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const { nome, arquivoUrl, validade, emissor, status } = req.body;
+    const doc = await empresaDocService.atualizar(req.params.docId as string, {
+      nome, arquivoUrl, validade, emissor, status,
+    });
+    res.json(doc);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function removerDocumento(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    await empresaDocService.remover(req.params.docId as string);
+    res.json({ removido: true });
   } catch (err) {
     next(err);
   }
