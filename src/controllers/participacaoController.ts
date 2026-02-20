@@ -120,3 +120,81 @@ export async function reprocessarDocumentos(
     next(err);
   }
 }
+
+export async function analisarEditalManual(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const { editalUrl } = req.body;
+    if (!editalUrl || typeof editalUrl !== "string") {
+      res.status(400).json({ error: "'editalUrl' é obrigatório" });
+      return;
+    }
+    const result = await participacaoService.analisarEditalManual(
+      req.params.id as string,
+      editalUrl
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function analisarEditalUpload(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "Arquivo PDF é obrigatório" });
+      return;
+    }
+    if (file.mimetype !== "application/pdf") {
+      res.status(400).json({ error: "O arquivo deve ser um PDF" });
+      return;
+    }
+    const result = await participacaoService.analisarEditalUpload(
+      req.params.id as string,
+      file.buffer,
+      file.originalname
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function buscarEditalViaRobo(
+  req: Request,
+  res: Response,
+  _next: NextFunction
+) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  function enviarEvento(data: object) {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  }
+
+  try {
+    const result = await participacaoService.buscarEditalViaRobo(
+      req.params.id as string,
+      (evento) => enviarEvento(evento)
+    );
+
+    enviarEvento({ etapa: "fim", tipo: "resultado", dados: result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    enviarEvento({ etapa: "erro", mensagem: msg, tipo: "erro" });
+  } finally {
+    res.end();
+  }
+}

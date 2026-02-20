@@ -1,5 +1,8 @@
 import {
   buscarContratacoes,
+  construirUrlEdital,
+  construirUrlPaginaPncp,
+  parsePncpId,
   type PncpFiltros,
   type PncpContratacaoResponse,
   type CancelSignal,
@@ -18,6 +21,21 @@ const ESFERA_MAP: Record<string, string> = {
 };
 
 function mapearContratacao(item: PncpContratacaoResponse) {
+  const parsed = parsePncpId(item.numeroControlePNCP);
+  const cnpj = item.orgaoEntidade.cnpj.replace(/\D/g, "");
+
+  let linkEdital = "";
+  let linkPortal = item.linkSistemaOrigem || "";
+
+  if (parsed) {
+    linkEdital = construirUrlEdital(cnpj, parsed.ano, parsed.sequencial);
+    if (!linkPortal) {
+      linkPortal = construirUrlPaginaPncp(cnpj, parsed.ano, parsed.sequencial);
+    }
+  } else if (item.linkProcesso) {
+    linkPortal = linkPortal || item.linkProcesso;
+  }
+
   return {
     pncpId: item.numeroControlePNCP,
     objeto: item.objetoCompra,
@@ -34,8 +52,8 @@ function mapearContratacao(item: PncpContratacaoResponse) {
       : null,
     situacao: item.situacaoCompraNome || "Divulgada",
     portal: "PNCP",
-    linkPortal: item.linkSistemaOrigem || "",
-    linkEdital: item.linkProcesso || "",
+    linkPortal,
+    linkEdital,
     stemsObjeto: processarTexto(item.objetoCompra),
   };
 }

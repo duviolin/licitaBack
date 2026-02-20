@@ -81,6 +81,73 @@ const MODALIDADES_NOMES: Record<number, string> = {
   11: "Pré-qualificação", 12: "Credenciamento", 13: "Leilão Presencial",
 };
 
+export function construirUrlEdital(cnpjOrgao: string, anoCompra: string, sequencialCompra: string): string {
+  const seq = sequencialCompra.replace(/\D/g, "");
+  return `${env.PNCP_BASE_URL}/orgaos/${cnpjOrgao}/compras/${seq}${anoCompra}/arquivos/1`;
+}
+
+export function construirUrlPaginaPncp(cnpjOrgao: string, anoCompra: string, sequencialCompra: string): string {
+  const seq = sequencialCompra.replace(/\D/g, "");
+  return `https://pncp.gov.br/app/editais/${cnpjOrgao}/${anoCompra}/${seq}`;
+}
+
+export function parsePncpId(numeroControlePNCP: string): { cnpj: string; ano: string; sequencial: string } | null {
+  const parts = numeroControlePNCP.split("-");
+  if (parts.length < 3) return null;
+  const cnpj = parts[0];
+  const rest = parts.slice(2).join("-");
+  const slashIdx = rest.indexOf("/");
+  if (slashIdx === -1) return null;
+  return {
+    cnpj,
+    sequencial: rest.slice(0, slashIdx),
+    ano: rest.slice(slashIdx + 1),
+  };
+}
+
+export interface PncpArquivo {
+  sequencialDocumento: number;
+  uri: string;
+  url: string;
+  titulo: string;
+  tipoDocumentoId: number;
+  tipoDocumentoDescricao: string;
+}
+
+export async function buscarArquivosCompra(
+  cnpjOrgao: string,
+  anoCompra: string,
+  sequencialCompra: string
+): Promise<PncpArquivo[]> {
+  const seq = sequencialCompra.replace(/\D/g, "");
+  const url = `${env.PNCP_BASE_URL}/orgaos/${cnpjOrgao}/compras/${seq}${anoCompra}/arquivos`;
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "licitacoes-mvp/1.0" },
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+export function encontrarEditalPdf(arquivos: PncpArquivo[]): string | null {
+  const edital = arquivos.find((a) =>
+    a.tipoDocumentoDescricao?.toLowerCase().includes("edital") ||
+    a.titulo?.toLowerCase().includes("edital")
+  );
+  if (edital?.url) return edital.url;
+  if (edital?.uri) return `${env.PNCP_BASE_URL}${edital.uri}`;
+  if (arquivos.length > 0) {
+    const first = arquivos[0];
+    if (first.url) return first.url;
+    if (first.uri) return `${env.PNCP_BASE_URL}${first.uri}`;
+  }
+  return null;
+}
+
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
 

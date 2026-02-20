@@ -26,12 +26,15 @@
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "express": "^5.2.1",
+    "multer": "^2.0.2",
     "natural": "latest",
     "pdf-parse": "^2.4.5",
-    "pg": "^8.17.1"
+    "pg": "^8.17.1",
+    "puppeteer": "^24.37.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.0.0",
     "@types/node": "^25.0.9",
     "cross-env": "^7.0.3",
     "dotenv": "^17.2.3",

@@ -8,7 +8,6 @@ import { api } from '../lib/api';
 import { formatCurrency, formatDate } from '../lib/constants';
 import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
-import { FieldHelp } from '../components/FieldHelp';
 import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import type { Empresa, Licitacao, Participacao, ParticipacaoStatus } from '../types';
@@ -297,42 +296,26 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
   const [empresaId, setEmpresaId] = useState(preEmpresaId);
   const [licitacaoId, setLicitacaoId] = useState(preLicitacaoId);
   const [licitacoes, setLicitacoes] = useState<Licitacao[]>([]);
-  const [editalUrl, setEditalUrl] = useState('');
-  const [valorProposta, setValorProposta] = useState('');
-  const [observacoes, setObservacoes] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingLics, setLoadingLics] = useState(false);
 
+  const selectedLic = licitacoes.find((l) => l.id === licitacaoId);
+
   useEffect(() => {
     setLoadingLics(true);
-    api.get<{ data: Licitacao[] }>('/licitacoes?limit=100')
+    api.get<{ data: Licitacao[] }>('/licitacoes?limit=200')
       .then((r) => setLicitacoes(r.data))
       .finally(() => setLoadingLics(false));
   }, []);
 
-  useEffect(() => {
-    if (licitacaoId) {
-      const lic = licitacoes.find((l) => l.id === licitacaoId);
-      if (lic?.linkEdital && !editalUrl) {
-        setEditalUrl(lic.linkEdital);
-      }
-    }
-  }, [licitacaoId, licitacoes, editalUrl]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleParticipar() {
     if (!empresaId || !licitacaoId) {
       onError('Selecione empresa e licitação');
       return;
     }
     try {
       setLoading(true);
-      const body: Record<string, unknown> = { empresaId, licitacaoId };
-      if (editalUrl) body.editalUrl = editalUrl;
-      if (valorProposta) body.valorProposta = Number(valorProposta);
-      if (observacoes) body.observacoes = observacoes;
-
-      const result = await api.post<Participacao>('/participacoes', body);
+      const result = await api.post<Participacao>('/participacoes', { empresaId, licitacaoId });
       onSuccess(result);
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Erro ao registrar');
@@ -342,15 +325,10 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Registrar Participação" size="lg">
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal open={open} onClose={onClose} title="Participar de Licitação" size="md">
+      <div className="space-y-4">
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-700">
-          <p className="font-medium mb-1">O que acontece ao registrar?</p>
-          <p>
-            O sistema cria a participação e, se houver URL do edital, <strong>automaticamente
-            baixa o PDF, extrai os requisitos e verifica se a empresa tem todos os documentos</strong>.
-            Você já sai sabendo se está apta ou o que falta.
-          </p>
+          O sistema vai <strong>automaticamente baixar o edital, extrair requisitos e verificar seus documentos</strong>.
         </div>
 
         <div>
@@ -359,14 +337,13 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
             value={empresaId}
             onChange={(e) => setEmpresaId(e.target.value)}
             className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            disabled={loading}
+            disabled={loading || empresas.length === 1}
           >
-            <option value="">Selecione a empresa...</option>
+            <option value="">Selecione...</option>
             {empresas.map((e) => (
               <option key={e.id} value={e.id}>{e.nomeFantasia || e.razaoSocial}</option>
             ))}
           </select>
-          <FieldHelp text="A empresa que vai participar. Deve ter documentos cadastrados para a análise funcionar." />
         </div>
 
         <div>
@@ -377,59 +354,32 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
             className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             disabled={loading || loadingLics}
           >
-            <option value="">{loadingLics ? 'Carregando...' : 'Selecione a licitação...'}</option>
+            <option value="">{loadingLics ? 'Carregando...' : 'Selecione...'}</option>
             {licitacoes.map((l) => (
               <option key={l.id} value={l.id}>
-                {l.objeto.slice(0, 80)} — {l.uf} ({formatCurrency(l.valorEstimado)})
+                {l.objeto.slice(0, 80)} — {l.uf}
               </option>
             ))}
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            URL do Edital (PDF) — preenche automaticamente se disponível
-          </label>
-          <input
-            type="url"
-            value={editalUrl}
-            onChange={(e) => setEditalUrl(e.target.value)}
-            placeholder="https://pncp.gov.br/edital.pdf"
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            disabled={loading}
-          />
-          <FieldHelp text="URL direta do PDF do edital. Se preenchida, o sistema analisa automaticamente os requisitos ao criar a participação." />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Valor da proposta (R$) — opcional
-          </label>
-          <input
-            type="number"
-            value={valorProposta}
-            onChange={(e) => setValorProposta(e.target.value)}
-            placeholder="Ex: 50000"
-            min="0"
-            step="100"
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            Observações — opcional
-          </label>
-          <textarea
-            value={observacoes}
-            onChange={(e) => setObservacoes(e.target.value)}
-            placeholder="Anotações sobre a participação..."
-            rows={2}
-            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-            disabled={loading}
-          />
-        </div>
+        {selectedLic && (
+          <div className="bg-slate-50 rounded-lg p-3 text-sm space-y-1">
+            <p className="font-medium text-slate-900 truncate">{selectedLic.objeto}</p>
+            <div className="flex items-center gap-3 text-xs text-slate-500">
+              <span>{selectedLic.orgao}</span>
+              <span>{selectedLic.modalidade}</span>
+              {selectedLic.valorEstimado && <span>{formatCurrency(selectedLic.valorEstimado)}</span>}
+            </div>
+            <div className="flex items-center gap-2 text-xs mt-1">
+              {selectedLic.linkEdital ? (
+                <span className="text-green-600 flex items-center gap-1"><CheckCircle2 size={12} /> Edital disponível</span>
+              ) : (
+                <span className="text-amber-600 flex items-center gap-1"><AlertCircle size={12} /> Edital será buscado automaticamente</span>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-2">
           <button
@@ -441,18 +391,18 @@ function CriarParticipacaoModal({ open, empresas, preEmpresaId, preLicitacaoId, 
             Cancelar
           </button>
           <button
-            type="submit"
+            onClick={handleParticipar}
             disabled={loading || !empresaId || !licitacaoId}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
           >
             {loading ? (
-              <><Loader2 size={16} className="animate-spin" /> Criando e analisando...</>
+              <><Loader2 size={16} className="animate-spin" /> Analisando...</>
             ) : (
               'Participar'
             )}
           </button>
         </div>
-      </form>
+      </div>
     </Modal>
   );
 }

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, AlertCircle, CheckCircle2,
   Calendar, FileText, RefreshCw, Trash2, XCircle,
   ExternalLink, Clock, Shield, Handshake, ChevronDown, ChevronUp,
+  Link2, Send, Upload, Bot,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, formatCurrency } from '../lib/constants';
@@ -15,6 +16,13 @@ import type {
   Participacao, ParticipacaoStatus, ConformidadeStatus,
   DocumentoExigido, ConformidadeDocumento, PrazosEdital,
 } from '../types';
+
+interface RoboLogEntry {
+  etapa: string;
+  mensagem: string;
+  tipo: 'info' | 'sucesso' | 'erro' | 'detalhe' | 'resultado';
+  ts: number;
+}
 
 const STATUS_CFG: Record<ParticipacaoStatus, { label: string; color: string; bg: string }> = {
   ANALISANDO: { label: 'Analisando Edital', color: 'text-blue-700', bg: 'bg-blue-100' },
@@ -45,10 +53,20 @@ export function ParticipacaoDetalhe() {
   const [showEdit, setShowEdit] = useState(false);
   const [showRemove, setShowRemove] = useState(false);
   const [docsExpanded, setDocsExpanded] = useState(false);
+  const [editalUrlManual, setEditalUrlManual] = useState('');
+  const [analisando, setAnalisando] = useState(false);
+  const [editalTab, setEditalTab] = useState<'link' | 'upload' | 'robo'>('robo');
+  const [editalFile, setEditalFile] = useState<File | null>(null);
+  const [roboLog, setRoboLog] = useState<RoboLogEntry[]>([]);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (id) loadDetalhe(id);
   }, [id]);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [roboLog]);
 
   async function loadDetalhe(pid: string) {
     try {
@@ -73,6 +91,113 @@ export function ParticipacaoDetalhe() {
       addToast('error', err instanceof Error ? err.message : 'Erro ao reprocessar');
     } finally {
       setReprocessando(false);
+    }
+  }
+
+  async function handleAnalisarManual() {
+    if (!id || !editalUrlManual.trim()) return;
+    try {
+      setAnalisando(true);
+      const data = await api.post<Participacao>(`/participacoes/${id}/analisar-edital`, {
+        editalUrl: editalUrlManual.trim(),
+      });
+      setParticipacao(data);
+      setEditalUrlManual('');
+      addToast('success', 'Análise de edital concluída!');
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Erro ao analisar edital');
+    } finally {
+      setAnalisando(false);
+    }
+  }
+
+  async function handleRetentarAnalise() {
+    if (!id || !participacao?.editalUrl) return;
+    try {
+      setAnalisando(true);
+      const data = await api.post<Participacao>(`/participacoes/${id}/analisar-edital`, {
+        editalUrl: participacao.editalUrl,
+      });
+      setParticipacao(data);
+      addToast('success', 'Análise de edital concluída!');
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Erro ao analisar edital');
+    } finally {
+      setAnalisando(false);
+    }
+  }
+
+  async function handleUploadEdital() {
+    if (!id || !editalFile) return;
+    try {
+      setAnalisando(true);
+      const formData = new FormData();
+      formData.append('edital', editalFile);
+
+      const res = await fetch(`/api/participacoes/${id}/analisar-edital-upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Erro ${res.status}`);
+      }
+      const data: Participacao = await res.json();
+      setParticipacao(data);
+      setEditalFile(null);
+      addToast('success', 'Análise de edital concluída!');
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Erro ao analisar edital');
+    } finally {
+      setAnalisando(false);
+    }
+  }
+
+  async function handleBuscarViaRobo() {
+    if (!id) return;
+    setAnalisando(true);
+    setRoboLog([{ etapa: 'inicio', mensagem: 'Iniciando robô...', tipo: 'info', ts: Date.now() }]);
+
+    try {
+      const response = await fetch(`/api/participacoes/${id}/buscar-edital-robo`, { method: 'POST' });
+
+      if (!response.body) {
+        throw new Error('Navegador não suporta streaming');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evento = JSON.parse(line.slice(6));
+            if (evento.tipo === 'resultado' && evento.dados) {
+              setParticipacao(evento.dados as Participacao);
+              addToast('success', 'Robô encontrou e analisou o edital!');
+            } else {
+              setRoboLog((prev) => [...prev, { ...evento, ts: Date.now() }]);
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      setRoboLog((prev) => [...prev, { etapa: 'erro', mensagem: msg, tipo: 'erro', ts: Date.now() }]);
+      addToast('error', msg);
+    } finally {
+      setAnalisando(false);
     }
   }
 
@@ -294,19 +419,211 @@ export function ParticipacaoDetalhe() {
         </div>
       )}
 
-      {/* Observações */}
-      {p.observacoes && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900 mb-2">Observações</h2>
-          <p className="text-sm text-slate-600 whitespace-pre-wrap">{p.observacoes}</p>
-        </div>
-      )}
+      {/* Painel de análise manual */}
+      {docsExigidos.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-4 shadow-sm">
+          <div className="flex items-start gap-3 mb-3">
+            <AlertCircle size={20} className="text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-800">
+                {p.editalUrl && !p.editalUrl.startsWith('upload://') ? 'Falha na análise do edital' : 'Sem análise de edital'}
+              </p>
+              <p className="text-sm text-amber-700 mt-0.5">
+                {p.editalUrl && !p.editalUrl.startsWith('upload://')
+                  ? 'O sistema não conseguiu baixar ou processar o PDF do edital. Use o robô para buscar automaticamente, informe outro link ou envie o PDF.'
+                  : 'Use o robô para buscar automaticamente, cole o link do PDF ou faça upload do arquivo para disparar a análise.'}
+              </p>
+            </div>
+          </div>
 
-      {/* Sem análise */}
-      {docsExigidos.length === 0 && !p.editalUrl && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 text-sm text-amber-700">
-          <p className="font-medium">Sem análise de edital</p>
-          <p>Esta participação foi criada sem URL de edital. Edite e adicione a URL para disparar a análise.</p>
+          {p.editalUrl && !p.editalUrl.startsWith('upload://') && (
+            <div className="mb-3">
+              <p className="text-xs text-amber-600 mb-1">URL utilizada:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-white/60 border border-amber-200 rounded px-2 py-1.5 text-amber-800 truncate">
+                  {p.editalUrl}
+                </code>
+                <button
+                  onClick={handleRetentarAnalise}
+                  disabled={analisando}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-800 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {analisando ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  Tentar novamente
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-amber-200 pt-3">
+            <div className="flex gap-1 mb-3 bg-amber-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setEditalTab('robo')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  editalTab === 'robo' ? 'bg-white text-amber-900 shadow-sm' : 'text-amber-700 hover:text-amber-900'
+                }`}
+              >
+                <Bot size={13} /> Buscar com Robô
+              </button>
+              <button
+                onClick={() => setEditalTab('link')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  editalTab === 'link' ? 'bg-white text-amber-900 shadow-sm' : 'text-amber-700 hover:text-amber-900'
+                }`}
+              >
+                <Link2 size={13} /> Informar link
+              </button>
+              <button
+                onClick={() => setEditalTab('upload')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  editalTab === 'upload' ? 'bg-white text-amber-900 shadow-sm' : 'text-amber-700 hover:text-amber-900'
+                }`}
+              >
+                <Upload size={13} /> Enviar PDF
+              </button>
+            </div>
+
+            {editalTab === 'robo' && (
+              <div className="space-y-3">
+                {roboLog.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-amber-200 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                        <Bot size={20} className="text-purple-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-slate-800">Busca automática com robô</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          O robô abre um navegador invisível, navega até o portal, encontra o PDF do edital, baixa e analisa tudo automaticamente.
+                        </p>
+                        {(p.portalLink || p.licitacao?.linkPortal) && (
+                          <p className="text-xs text-purple-600 mt-1.5 font-medium truncate">
+                            Portal: {p.portalLink || p.licitacao?.linkPortal}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-800 border-b border-slate-700">
+                      <div className="flex gap-1.5">
+                        <span className="w-3 h-3 rounded-full bg-red-500" />
+                        <span className="w-3 h-3 rounded-full bg-yellow-500" />
+                        <span className="w-3 h-3 rounded-full bg-green-500" />
+                      </div>
+                      <span className="text-xs text-slate-400 font-mono ml-2">robô — busca de edital</span>
+                      {analisando && <Loader2 size={12} className="animate-spin text-purple-400 ml-auto" />}
+                    </div>
+                    <div className="p-3 max-h-72 overflow-y-auto font-mono text-xs space-y-0.5">
+                      {roboLog.map((entry, i) => (
+                        <RoboLogLine key={i} entry={entry} />
+                      ))}
+                      <div ref={logEndRef} />
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={handleBuscarViaRobo}
+                  disabled={analisando || (!p.portalLink && !p.licitacao?.linkPortal)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {analisando ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Robô trabalhando...
+                    </>
+                  ) : roboLog.length > 0 ? (
+                    <>
+                      <RefreshCw size={16} />
+                      Tentar Novamente
+                    </>
+                  ) : (
+                    <>
+                      <Bot size={16} />
+                      Iniciar Busca Automática
+                    </>
+                  )}
+                </button>
+                {!p.portalLink && !p.licitacao?.linkPortal && (
+                  <p className="text-xs text-red-600 text-center">
+                    Sem link do portal disponível. Use as opções de link manual ou upload.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {editalTab === 'link' && (
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={editalUrlManual}
+                  onChange={(e) => setEditalUrlManual(e.target.value)}
+                  placeholder="https://... cole o link direto do PDF do edital"
+                  className="flex-1 px-3 py-2 border border-amber-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-400 focus:border-amber-400 outline-none placeholder:text-amber-400"
+                  disabled={analisando}
+                />
+                <button
+                  onClick={handleAnalisarManual}
+                  disabled={analisando || !editalUrlManual.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {analisando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  Analisar
+                </button>
+              </div>
+            )}
+
+            {editalTab === 'upload' && (
+              <div className="space-y-2">
+                <label
+                  className={`flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    editalFile
+                      ? 'border-purple-400 bg-purple-50'
+                      : 'border-amber-300 bg-white hover:border-amber-400 hover:bg-amber-50/50'
+                  } ${analisando ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  <input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    className="hidden"
+                    disabled={analisando}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) setEditalFile(f);
+                    }}
+                  />
+                  {editalFile ? (
+                    <>
+                      <FileText size={24} className="text-purple-500" />
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-purple-800">{editalFile.name}</p>
+                        <p className="text-xs text-purple-600 mt-0.5">
+                          {(editalFile.size / 1024 / 1024).toFixed(2)} MB — Clique para trocar
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={24} className="text-amber-500" />
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-amber-800">Clique para selecionar o PDF</p>
+                        <p className="text-xs text-amber-600 mt-0.5">ou arraste e solte aqui (máx. 50MB)</p>
+                      </div>
+                    </>
+                  )}
+                </label>
+                <button
+                  onClick={handleUploadEdital}
+                  disabled={analisando || !editalFile}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {analisando ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  Enviar e Analisar Edital
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -517,5 +834,33 @@ function EditModal({ participacao, onClose, onSuccess, onError }: {
         </div>
       </form>
     </Modal>
+  );
+}
+
+const LOG_TIPO_STYLES: Record<string, string> = {
+  info: 'text-blue-400',
+  sucesso: 'text-green-400',
+  erro: 'text-red-400',
+  detalhe: 'text-slate-500',
+};
+
+const LOG_TIPO_PREFIX: Record<string, string> = {
+  info: '►',
+  sucesso: '✓',
+  erro: '✗',
+  detalhe: '  •',
+};
+
+function RoboLogLine({ entry }: { entry: RoboLogEntry }) {
+  const color = LOG_TIPO_STYLES[entry.tipo] || 'text-slate-400';
+  const prefix = LOG_TIPO_PREFIX[entry.tipo] || '►';
+  const time = new Date(entry.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  return (
+    <div className={`flex gap-2 leading-relaxed ${color}`}>
+      <span className="text-slate-600 shrink-0 select-none">{time}</span>
+      <span className="shrink-0 w-3 text-center select-none">{prefix}</span>
+      <span className={entry.tipo === 'detalhe' ? 'text-slate-500 italic' : ''}>{entry.mensagem}</span>
+    </div>
   );
 }
