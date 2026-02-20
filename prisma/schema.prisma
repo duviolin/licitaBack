@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ParticipacaoStatus {
+  ANALISANDO
+  PROPOSTA_ENVIADA
+  EM_DISPUTA
+  GANHO
+  PERDIDO
+}
+
+model Empresa {
+  id                     String   @id @default(uuid())
+  cnpj                   String   @unique
+  razaoSocial            String
+  nomeFantasia           String   @default("")
+  cnaePrincipal          String
+  cnaePrincipalDescricao String
+  cnaesSecundarios       Json     @default("[]")
+  uf                     String   @default("")
+  municipio              String   @default("")
+  situacaoCadastral      String   @default("")
+
+  stemsCnae              String[]
+
+  palavrasChave          String[] @default([])
+  stemsChave             String[] @default([])
+  ufsInteresse           String[] @default([])
+  modalidadesInteresse   String[] @default([])
+  valorMinimo            Decimal? @default(0)
+  valorMaximo            Decimal?
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  matches       LicitacaoMatch[]
+  participacoes Participacao[]
+}
+
+model Licitacao {
+  id               String   @id @default(uuid())
+  pncpId           String   @unique
+  objeto           String
+  orgao            String
+  modalidade       String
+  valorEstimado    Decimal?
+  uf               String
+  municipioIbge    String   @default("")
+  esfera           String   @default("")
+  dataPublicacao   DateTime
+  dataAbertura     DateTime?
+  dataEncerramento DateTime?
+  situacao         String   @default("Divulgada")
+  portal           String   @default("PNCP")
+  linkPortal       String   @default("")
+  linkEdital       String   @default("")
+
+  stemsObjeto      String[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  matches       LicitacaoMatch[]
+  participacoes Participacao[]
+
+  @@index([uf])
+  @@index([modalidade])
+  @@index([dataPublicacao])
+  @@index([esfera])
+  @@index([situacao])
+  @@index([dataEncerramento])
+}
+
+model LicitacaoMatch {
+  id              String   @id @default(uuid())
+  empresaId       String
+  licitacaoId     String
+
+  score           Decimal
+  scoreTextual    Decimal
+  scoreGeografico Decimal
+  scoreValor      Decimal
+  palavrasMatch   String[]
+
+  createdAt       DateTime @default(now())
+
+  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  licitacao Licitacao @relation(fields: [licitacaoId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, licitacaoId])
+  @@index([empresaId])
+  @@index([licitacaoId])
+  @@index([score])
+}
+
+model Participacao {
+  id               String             @id @default(uuid())
+  empresaId        String
+  licitacaoId      String
+  dataParticipacao DateTime           @default(now())
+  valorProposta    Decimal?
+  status           ParticipacaoStatus @default(ANALISANDO)
+  observacoes      String             @default("")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  licitacao Licitacao @relation(fields: [licitacaoId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, licitacaoId])
+  @@index([empresaId])
+  @@index([licitacaoId])
+  @@index([status])
+}
