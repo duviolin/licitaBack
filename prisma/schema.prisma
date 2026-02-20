@@ -21,6 +21,48 @@ enum ParticipacaoStatus {
   PERDIDO
 }
 
+enum LicitacaoExecStatus {
+  ANALISE
+  DOCUMENTOS_OK
+  PENDENTE_DOC
+  PRONTO_ENVIO
+  ENVIADO
+}
+
+enum DocumentoTipo {
+  CND_FEDERAL
+  CND_ESTADUAL
+  CND_MUNICIPAL
+  CND_TRABALHISTA
+  FGTS
+  BALANCO_PATRIMONIAL
+  ATESTADO_TECNICO
+  CONTRATO_SOCIAL
+  ALVARA
+  CERTIDAO_FALENCIA
+  SICAF
+  CNPJ_CARTAO
+  PROCURACAO
+  DECLARACAO_ME_EPP
+  DECLARACAO_INEXISTENCIA_FATO
+  DECLARACAO_MENOR
+  REGISTRO_CONSELHO
+  OUTRO
+}
+
+enum DocumentoStatus {
+  VALIDO
+  VENCIDO
+  AUSENTE
+}
+
+enum ConformidadeStatus {
+  OK
+  AUSENTE
+  VENCIDO
+  INCOMPATIVEL
+}
+
 model Empresa {
   id                     String   @id @default(uuid())
   cnpj                   String   @unique
@@ -47,6 +89,10 @@ model Empresa {
 
   matches       LicitacaoMatch[]
   participacoes Participacao[]
+
+  documentos            EmpresaDocumento[]
+  licitacaoExecs        LicitacaoExec[]
+  participacoesPreparadas ParticipacaoPreparada[]
 }
 
 model Licitacao {
@@ -74,6 +120,7 @@ model Licitacao {
 
   matches       LicitacaoMatch[]
   participacoes Participacao[]
+  licitacaoExecs LicitacaoExec[]
 
   @@index([uf])
   @@index([modalidade])
@@ -125,4 +172,114 @@ model Participacao {
   @@index([empresaId])
   @@index([licitacaoId])
   @@index([status])
+}
+
+model LicitacaoExec {
+  id          String              @id @default(uuid())
+  licitacaoId String
+  empresaId   String
+  editalUrl   String
+  editalTexto String?             @db.Text
+  portalLink  String              @default("")
+  status      LicitacaoExecStatus @default(ANALISE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  licitacao Licitacao @relation(fields: [licitacaoId], references: [id], onDelete: Cascade)
+  empresa   Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  documentosExigidos    DocumentoExigido[]
+  conformidades         ConformidadeDocumento[]
+  prazos                PrazosEdital?
+  participacaoPreparada ParticipacaoPreparada?
+
+  @@index([licitacaoId])
+  @@index([empresaId])
+  @@index([status])
+}
+
+model DocumentoExigido {
+  id                  String       @id @default(uuid())
+  licitacaoExecId     String
+  tipo                DocumentoTipo
+  nome                String
+  secaoEdital         String       @default("")
+  obrigatorio         Boolean      @default(true)
+  validadeDias        Int?
+  autenticacaoExigida Boolean      @default(false)
+  referenciaEdital    String       @default("") @db.Text
+  createdAt           DateTime     @default(now())
+
+  licitacaoExec LicitacaoExec @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
+  conformidades ConformidadeDocumento[]
+
+  @@index([licitacaoExecId])
+  @@index([tipo])
+}
+
+model EmpresaDocumento {
+  id         String         @id @default(uuid())
+  empresaId  String
+  tipo       DocumentoTipo
+  nome       String
+  arquivoUrl String         @default("")
+  validade   DateTime?
+  emissor    String         @default("")
+  status     DocumentoStatus @default(VALIDO)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  empresa       Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  conformidades ConformidadeDocumento[]
+
+  @@index([empresaId])
+  @@index([tipo])
+  @@index([status])
+}
+
+model ConformidadeDocumento {
+  id                 String             @id @default(uuid())
+  licitacaoExecId    String
+  empresaId          String
+  documentoExigidoId String
+  empresaDocumentoId String?
+  status             ConformidadeStatus
+  observacao         String             @default("")
+  createdAt          DateTime           @default(now())
+
+  licitacaoExec    LicitacaoExec    @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
+  documentoExigido DocumentoExigido @relation(fields: [documentoExigidoId], references: [id], onDelete: Cascade)
+  empresaDocumento EmpresaDocumento? @relation(fields: [empresaDocumentoId], references: [id], onDelete: SetNull)
+
+  @@index([licitacaoExecId])
+  @@index([empresaId])
+}
+
+model PrazosEdital {
+  id                  String    @id @default(uuid())
+  licitacaoExecId     String    @unique
+  dataAbertura        DateTime?
+  dataSessao          DateTime?
+  prazoImpugnacao     DateTime?
+  prazoEsclarecimento DateTime?
+  prazoRecurso        DateTime?
+  createdAt           DateTime  @default(now())
+
+  licitacaoExec LicitacaoExec @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
+}
+
+model ParticipacaoPreparada {
+  id              String   @id @default(uuid())
+  licitacaoExecId String   @unique
+  empresaId       String
+  documentosOk    Boolean  @default(false)
+  checklist       Json     @default("[]")
+  propostaBase    Decimal?
+  prontoParaEnvio Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  licitacaoExec LicitacaoExec @relation(fields: [licitacaoExecId], references: [id], onDelete: Cascade)
+  empresa       Empresa       @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
 }
